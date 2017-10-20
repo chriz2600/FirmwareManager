@@ -245,7 +245,9 @@ bool copyBlockwise(String source, String destination, unsigned int length) {
   if (src) {
     File dest = SPIFFS.open(destination, "w");
     if (dest) {
+      server.sendContent("shorten file:\n");
       while (i <= length) {
+        server.sendContent(String(i) + "\n");
         src.readBytes((char *) buff, 256);
         dest.write(buff, 256);
         i++;
@@ -339,16 +341,18 @@ void setup(void){
 
     File f = SPIFFS.open("/output_file.rbf", "r");
     if (f) {
+      // activate CS
+      pinMode(CS, OUTPUT);
       chip_erase();
       while (f.readBytes((char *) buffer, 256)) {
-        server.sendContent(String(page));
-        server.sendContent("\n");
+        server.sendContent(String(page) + "\n");
         write_page(page, buffer);
         // cleanup buffer
         initBuffer(buffer);
         page++;
       }
-      server.sendContent("\n");
+      // disable CS
+      pinMode(CS, INPUT);
       f.close();
     }
 
@@ -368,21 +372,21 @@ void setup(void){
 
     File f = SPIFFS.open(temp_filename, "w");
     if (f) {
+      // activate CS
+      pinMode(CS, OUTPUT);
+      server.sendContent("read from flash:\n");
       for (unsigned int i = 0; i < 4096; ++i) {
         server.sendContent(String(i));
         server.sendContent("\n");
         read_page(i, page_buffer);
-        if (i == 1) {
-          print_page_bytes(i, page_buffer);
-        } else if (i % 128 == 0) {
-          print_page_bytes(i, page_buffer);
-        }
         f.write(page_buffer, 256); 
         if (strcmp((const char*) page_buffer, (const char*) zero_buffer) != 0) {
           last_page = i;
         }
       }
       server.sendContent("last_page:" + String(last_page) + "\n");
+      // disable CS
+      pinMode(CS, INPUT);
       copyBlockwise(temp_filename, "/flash.bin", last_page);
       SPIFFS.remove(temp_filename);
       f.close();

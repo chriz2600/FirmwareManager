@@ -28,7 +28,7 @@ void read_page(unsigned int page_number, uint8_t *page_buffer) {
     not_busy();
 }
 
-void _chip_erase(void) {
+void chip_erase(void) {
     digitalWrite(CS, HIGH);
     digitalWrite(CS, LOW);  
     SPI.transfer(WB_WRITE_ENABLE);
@@ -44,18 +44,13 @@ void _chip_erase(void) {
     not_busy();
 }
 
-void chip_erase(void) {
-    //pinMode(CS, OUTPUT);  
-    _chip_erase();
-    //pinMode(CS, INPUT);  
-}
-
 void SPIFlash_init(void) {
     SPI.begin();
     SPI.setDataMode(0);
     SPI.setBitOrder(MSBFIRST);
     SPI.setFrequency(32000000);
-    pinMode(CS, OUTPUT);
+    // initialze to not bother with CS
+    pinMode(CS, INPUT);
 }
 
 void write_page(unsigned int page_number, uint8_t *page_buffer) {
