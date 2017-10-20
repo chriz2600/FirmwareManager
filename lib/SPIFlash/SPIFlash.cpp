@@ -1,6 +1,6 @@
 #include <SPIFlash.h>
 
-void not_busy(void) {
+void SPIFlash_not_busy(void) {
     digitalWrite(CS, HIGH);  
     digitalWrite(CS, LOW);
     SPI.transfer(WB_READ_STATUS_REG_1);       
@@ -10,7 +10,7 @@ void not_busy(void) {
     digitalWrite(CS, HIGH);  
 }
 
-void read_page(unsigned int page_number, uint8_t *page_buffer) {
+void SPIFlash_page_read(unsigned int page_number, uint8_t *page_buffer) {
     digitalWrite(CS, HIGH);
     digitalWrite(CS, LOW);
     SPI.transfer(WB_READ_DATA);
@@ -25,10 +25,10 @@ void read_page(unsigned int page_number, uint8_t *page_buffer) {
         yield();
     }
     digitalWrite(CS, HIGH);
-    not_busy();
+    SPIFlash_not_busy();
 }
 
-void chip_erase(void) {
+void SPIFlash_chip_erase(void) {
     digitalWrite(CS, HIGH);
     digitalWrite(CS, LOW);  
     SPI.transfer(WB_WRITE_ENABLE);
@@ -36,12 +36,7 @@ void chip_erase(void) {
     digitalWrite(CS, LOW);
     SPI.transfer(WB_CHIP_ERASE);
     digitalWrite(CS, HIGH);
-    /* See notes on rev 2 
-    digitalWrite(CS, LOW);  
-    SPI.transfer(WB_WRITE_DISABLE);
-    digitalWrite(CS, HIGH);
-    */
-    not_busy();
+    SPIFlash_not_busy();
 }
 
 void SPIFlash_init(void) {
@@ -53,7 +48,7 @@ void SPIFlash_init(void) {
     pinMode(CS, INPUT);
 }
 
-void write_page(unsigned int page_number, uint8_t *page_buffer) {
+void SPIFlash_page_write(unsigned int page_number, uint8_t *page_buffer) {
     digitalWrite(CS, HIGH);
     digitalWrite(CS, LOW);  
     SPI.transfer(WB_WRITE_ENABLE);
@@ -67,11 +62,15 @@ void write_page(unsigned int page_number, uint8_t *page_buffer) {
       SPI.transfer(page_buffer[i]);
     }
     digitalWrite(CS, HIGH);
-    /* See notes on rev 2
-    digitalWrite(CS, LOW);  
-    SPI.transfer(WB_WRITE_DISABLE);
-    digitalWrite(CS, HIGH);
-    */
-    not_busy();
-  }
+    SPIFlash_not_busy();
+}
   
+void SPIFlash_cs_enable(void) {
+    // activate CS
+    pinMode(CS, OUTPUT);
+}
+
+void SPIFlash_cs_disable(void) {
+    // disable CS
+    pinMode(CS, INPUT);
+}

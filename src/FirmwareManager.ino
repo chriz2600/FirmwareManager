@@ -341,18 +341,16 @@ void setup(void){
 
     File f = SPIFFS.open("/output_file.rbf", "r");
     if (f) {
-      // activate CS
-      pinMode(CS, OUTPUT);
-      chip_erase();
+      SPIFlash_cs_enable();
+      SPIFlash_chip_erase();
       while (f.readBytes((char *) buffer, 256)) {
         server.sendContent(String(page) + "\n");
-        write_page(page, buffer);
+        SPIFlash_page_write(page, buffer);
         // cleanup buffer
         initBuffer(buffer);
         page++;
       }
-      // disable CS
-      pinMode(CS, INPUT);
+      SPIFlash_cs_disable();
       f.close();
     }
 
@@ -372,21 +370,19 @@ void setup(void){
 
     File f = SPIFFS.open(temp_filename, "w");
     if (f) {
-      // activate CS
-      pinMode(CS, OUTPUT);
       server.sendContent("read from flash:\n");
+      SPIFlash_cs_enable();
       for (unsigned int i = 0; i < 4096; ++i) {
         server.sendContent(String(i));
         server.sendContent("\n");
-        read_page(i, page_buffer);
+        SPIFlash_page_read(i, page_buffer);
         f.write(page_buffer, 256); 
         if (strcmp((const char*) page_buffer, (const char*) zero_buffer) != 0) {
           last_page = i;
         }
       }
+      SPIFlash_cs_disable();
       server.sendContent("last_page:" + String(last_page) + "\n");
-      // disable CS
-      pinMode(CS, INPUT);
       copyBlockwise(temp_filename, "/flash.bin", last_page);
       SPIFFS.remove(temp_filename);
       f.close();

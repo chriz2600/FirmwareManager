@@ -16,12 +16,16 @@
 
 void SPIFlash_init(void);
 
-void not_busy(void);
+void SPIFlash_not_busy(void);
 
-void read_page(unsigned int page_number, uint8_t *page_buffer);
+void SPIFlash_page_read(unsigned int page_number, uint8_t *page_buffer);
 
-void chip_erase(void);
+void SPIFlash_chip_erase(void);
 
-void write_page(unsigned int page_number, uint8_t *page_buffer);
+void SPIFlash_page_write(unsigned int page_number, uint8_t *page_buffer);
+
+void SPIFlash_cs_enable(void);
+
+void SPIFlash_cs_disable(void);
 
 #endif
