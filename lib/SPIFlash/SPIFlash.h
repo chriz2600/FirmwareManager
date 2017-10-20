@@ -12,20 +12,18 @@
 #define WB_PAGE_PROGRAM       0x02
 #define WB_JEDEC_ID           0x9f
 
-#define CS                    16
-
-void SPIFlash_init(void);
-
-void SPIFlash_not_busy(void);
-
-void SPIFlash_page_read(unsigned int page_number, uint8_t *page_buffer);
-
-void SPIFlash_chip_erase(void);
-
-void SPIFlash_page_write(unsigned int page_number, uint8_t *page_buffer);
-
-void SPIFlash_cs_enable(void);
-
-void SPIFlash_cs_disable(void);
+class SPIFlash
+{
+  public:
+    SPIFlash(int cs);
+    void page_read(unsigned int page_number, uint8_t *page_buffer);
+    void page_write(unsigned int page_number, uint8_t *page_buffer);
+    void chip_erase();
+    void enable();
+    void disable();
+private:
+    void not_busy();
+    int _cs;
+};
 
 #endif
