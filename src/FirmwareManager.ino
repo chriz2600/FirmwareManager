@@ -31,6 +31,7 @@
 #include <ArduinoOTA.h>
 
 #include <SPI.h>
+#include <SPIFlash.h>
 // SS:   pin 10
 // MOSI: pin 11
 // MISO: pin 12
@@ -49,13 +50,29 @@
 
 #define DBG_OUTPUT_PORT Serial
 
-const char* ssid = "chriz2600.x";
-const char* password = "!derPietistendlichda!";
+char ssid[64];
+char password[64];
 const char* host = "dc-firmware-manager";
+const char* WiFiAPPSK = "geheim1234";
+
+const uint8_t zero_buffer[256] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
 ESP8266WebServer server(80);
 //holds the current upload
 File fsUploadFile;
+
+void print_page_bytes(unsigned int page, const byte *page_buffer) {
+  char buf[10];
+  DBG_OUTPUT_PORT.print(String(page));
+  DBG_OUTPUT_PORT.println(":");
+  for (int i = 0; i < 16; ++i) {
+      for (int j = 0; j < 16; ++j) {
+          sprintf(buf, "%02x", page_buffer[i * 16 + j]);
+          DBG_OUTPUT_PORT.print(buf);
+      }
+      DBG_OUTPUT_PORT.println();
+  }
+}
 
 //format bytes
 String formatBytes(size_t bytes){
@@ -179,6 +196,73 @@ void handleFileList() {
   server.send(200, "text/json", output);
 }
 
+void readCredentials(void) {
+  bool exists = SPIFFS.exists("/ssid.txt");
+  if (exists) {
+    File f = SPIFFS.open("/ssid.txt", "r");
+    if (f) {
+      f.readString().toCharArray(ssid, 64);
+      f.close();
+    }
+  }
+
+  exists = SPIFFS.exists("/password.txt");
+  if (exists) {
+    File f = SPIFFS.open("/password.txt", "r");
+    if (f) {
+      f.readString().toCharArray(password, 64);
+      f.close();
+    }
+  }
+}
+
+void setupAPMode(void) {
+  WiFi.mode(WIFI_AP);
+  uint8_t mac[WL_MAC_ADDR_LENGTH];
+  WiFi.softAPmacAddress(mac);
+  String macID = String(mac[WL_MAC_ADDR_LENGTH - 2], HEX) +
+                 String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
+  macID.toUpperCase();
+  String AP_NameString = String(host) + String("-") + macID;
+
+  char AP_NameChar[AP_NameString.length() + 1];
+  memset(AP_NameChar, 0, AP_NameString.length() + 1);
+
+  for (int i=0; i<AP_NameString.length(); i++)
+    AP_NameChar[i] = AP_NameString.charAt(i);
+
+  WiFi.softAP(AP_NameChar, WiFiAPPSK);
+  DBG_OUTPUT_PORT.print("SSID: ");
+  DBG_OUTPUT_PORT.println(AP_NameChar);
+  DBG_OUTPUT_PORT.print("APPSK: ");
+  DBG_OUTPUT_PORT.println(WiFiAPPSK);
+}
+
+bool copyBlockwise(String source, String destination, unsigned int length) {
+  unsigned int i = 0;
+  uint8_t buff[256];
+  File src = SPIFFS.open(source, "r");
+  if (src) {
+    File dest = SPIFFS.open(destination, "w");
+    if (dest) {
+      while (i <= length) {
+        src.readBytes((char *) buff, 256);
+        dest.write(buff, 256);
+        i++;
+      }
+      dest.close();
+    }
+    src.close();
+  }
+}
+
+void initBuffer(uint8_t *buffer) {
+  for (int i = 0 ; i < 256 ; i++) { 
+    buffer[i] = 0xff; 
+    yield(); 
+  }
+}
+
 void setup(void){
   DBG_OUTPUT_PORT.begin(115200);
   DBG_OUTPUT_PORT.print("\n");
@@ -193,13 +277,11 @@ void setup(void){
     }
     DBG_OUTPUT_PORT.printf("\n");
   }
-  
+
+  readCredentials();
+
   // SPI
-  SPI.begin();
-  SPI.setDataMode(0);
-  SPI.setBitOrder(MSBFIRST);
-  SPI.setFrequency(16000000);
-  pinMode(CS, OUTPUT);
+  SPIFlash_init();
 
   //WIFI INIT
   DBG_OUTPUT_PORT.printf("Connecting to %s\n", ssid);
@@ -207,26 +289,107 @@ void setup(void){
     WiFi.begin(ssid, password);
   }
   
+  bool success = true;
+  int tries = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     DBG_OUTPUT_PORT.print(".");
+    if (tries == 60) {
+      WiFi.disconnect();
+      success = false;
+      break;
+    }
+    tries++;
   }
-  DBG_OUTPUT_PORT.println("");
-  DBG_OUTPUT_PORT.print("Connected! IP address: ");
-  DBG_OUTPUT_PORT.println(WiFi.localIP());
+  if (!success) {
+    // setup AP mode to configure ssid and password
+    setupAPMode();
+  } else {
+    DBG_OUTPUT_PORT.println("");
+    DBG_OUTPUT_PORT.print("Connected! IP address: ");
+    DBG_OUTPUT_PORT.println(WiFi.localIP());
+  }
 
-  MDNS.begin(host);
-  DBG_OUTPUT_PORT.print("Open http://");
-  DBG_OUTPUT_PORT.print(host);
-  DBG_OUTPUT_PORT.println(".local/edit to see the file browser");
-  
-  
+  if (MDNS.begin(host)) {
+    DBG_OUTPUT_PORT.println("mDNS started");
+    MDNS.addService("http", "tcp", 80);
+    DBG_OUTPUT_PORT.print("Open http://");
+    DBG_OUTPUT_PORT.print(host);
+    DBG_OUTPUT_PORT.println(".local/edit to see the file browser");
+  }
+
   //SERVER INIT
   //list directory
   server.on("/list", HTTP_GET, handleFileList);
   //load editor
   server.on("/edit", HTTP_GET, [](){
     if(!handleFileRead("/edit.htm")) server.send(404, "text/plain", "FileNotFound");
+  });
+  server.on("/flash-firmware", HTTP_GET, [](){
+    unsigned int page = 0;
+    uint8_t buffer[256];
+    // initialze
+    initBuffer(buffer);
+
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.sendHeader("Pragma", "no-cache");
+    server.sendHeader("Expires", "-1");
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN); // *** BEGIN ***
+    server.send(200, "text/plain", "");
+
+    File f = SPIFFS.open("/output_file.rbf", "r");
+    if (f) {
+      chip_erase();
+      while (f.readBytes((char *) buffer, 256)) {
+        server.sendContent(String(page));
+        server.sendContent("\n");
+        write_page(page, buffer);
+        // cleanup buffer
+        initBuffer(buffer);
+        page++;
+      }
+      server.sendContent("\n");
+      f.close();
+    }
+
+    server.sendContent(""); // *** END 1/2 ***
+    server.client().stop(); // *** END 2/2 ***
+  });
+  server.on("/download-firmware", HTTP_GET, [](){
+    uint8_t page_buffer[256];
+    unsigned int last_page = 0;
+    const char* temp_filename = "/_flash.bin";
+    
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.sendHeader("Pragma", "no-cache");
+    server.sendHeader("Expires", "-1");
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN); // *** BEGIN ***
+    server.send(200, "text/plain", "");
+
+    File f = SPIFFS.open(temp_filename, "w");
+    if (f) {
+      for (unsigned int i = 0; i < 4096; ++i) {
+        server.sendContent(String(i));
+        server.sendContent("\n");
+        read_page(i, page_buffer);
+        if (i == 1) {
+          print_page_bytes(i, page_buffer);
+        } else if (i % 128 == 0) {
+          print_page_bytes(i, page_buffer);
+        }
+        f.write(page_buffer, 256); 
+        if (strcmp((const char*) page_buffer, (const char*) zero_buffer) != 0) {
+          last_page = i;
+        }
+      }
+      server.sendContent("last_page:" + String(last_page) + "\n");
+      copyBlockwise(temp_filename, "/flash.bin", last_page);
+      SPIFFS.remove(temp_filename);
+      f.close();
+    }
+
+    server.sendContent(""); // *** END 1/2 ***
+    server.client().stop(); // *** END 2/2 ***
   });
   //create file
   server.on("/edit", HTTP_PUT, handleFileCreate);
@@ -260,7 +423,7 @@ void setup(void){
   // ArduinoOTA.setPort(8266);
 
   // Hostname defaults to esp8266-[ChipID]
-  // ArduinoOTA.setHostname("myesp8266");
+  ArduinoOTA.setHostname(host);
 
   // No authentication by default
   // ArduinoOTA.setPassword((const char *)"123");
@@ -292,291 +455,3 @@ void loop(void){
   server.handleClient();
   ArduinoOTA.handle();
 }
-
-
-
-/* 
- * These global variables enable assembly of the user serial 
- * input command.
- */
-
-/*
- * print_page_bytes() is a simple helperf function that formats 256
- * bytes of data into an easier to read grid.
- */
-
-void print_page_bytes(byte *page_buffer) {
-  char buf[10];
-  for (int i = 0; i < 16; ++i) {
-    for (int j = 0; j < 16; ++j) {
-      sprintf(buf, "%02x", page_buffer[i * 16 + j]);
-      DBG_OUTPUT_PORT.print(buf);
-    }
-    DBG_OUTPUT_PORT.println();
-  }
-}
-
-/*
-================================================================================
-User Interface Routines
-The functions below map to user commands. They wrap the low-level calls with 
-print/debug statements for readability.
-================================================================================
-*/
-
-/* 
- * The JEDEC ID is fairly generic, I use this function to verify the setup
- * is working properly.
- */
-void get_jedec_id(void) {
-  DBG_OUTPUT_PORT.println("command: get_jedec_id");
-  byte b1, b2, b3;
-  //pinMode(CS, OUTPUT);  
-  _get_jedec_id(&b1, &b2, &b3);
-  ////pinMode(CS, INPUT);  
-  char buf[128];
-  sprintf(buf, "Manufacturer ID: %02xh\nMemory Type: %02xh\nCapacity: %02xh",
-    b1, b2, b3);
-  DBG_OUTPUT_PORT.println(buf);
-  DBG_OUTPUT_PORT.println("Ready");
-} 
-
-void chip_erase(void) {
-  DBG_OUTPUT_PORT.println("command: chip_erase");
-  //pinMode(CS, OUTPUT);  
-  _chip_erase();
-  //pinMode(CS, INPUT);  
-  DBG_OUTPUT_PORT.println("Ready");
-}
-
-void read_page(unsigned int page_number) {
-  char buf[80];
-  sprintf(buf, "command: read_page(%04xh)", page_number);
-  DBG_OUTPUT_PORT.println(buf);
-  byte page_buffer[256];
-  //pinMode(CS, OUTPUT);  
-  _read_page(page_number, page_buffer);
-  //pinMode(CS, INPUT);  
-  print_page_bytes(page_buffer);
-  DBG_OUTPUT_PORT.println("Ready");
-}
-
-void read_all_pages(void) {
-  DBG_OUTPUT_PORT.println("command: read_all_pages");
-  byte page_buffer[256];
-  //pinMode(CS, OUTPUT);  
-  for (int i = 0; i < 4096; ++i) {
-    _read_page(i, page_buffer);
-    print_page_bytes(page_buffer);
-  }
-  //pinMode(CS, INPUT);  
-  DBG_OUTPUT_PORT.println("Ready");
-}
-
-void write_byte(word page, byte offset, byte databyte) {
-  char buf[80];
-  sprintf(buf, "command: write_byte(%04xh, %04xh, %02xh)", page, offset, databyte);
-  DBG_OUTPUT_PORT.println(buf);
-  byte page_data[256];
-  //pinMode(CS, OUTPUT);  
-  _read_page(page, page_data);
-  page_data[offset] = databyte;
-  _write_page(page, page_data);
-  //pinMode(CS, INPUT);  
-  DBG_OUTPUT_PORT.println("Ready");
-}
-
-/*
-================================================================================
-Low-Level Device Routines
-The functions below perform the lowest-level interactions with the flash device.
-They match the timing diagrams of the datahsheet. They are called by wrapper 
-functions which provide a little more feedback to the user. I made them stand-
-alone functions so they can be re-used. Each function corresponds to a flash
-instruction opcode.
-================================================================================
-*/
-
-/*
- * See the timing diagram in section 9.2.35 of the
- * data sheet, "Read JEDEC ID (9Fh)".
- */
-void _get_jedec_id(byte *b1, byte *b2, byte *b3) {
-  digitalWrite(CS, HIGH);
-  digitalWrite(CS, LOW);
-  SPI.transfer(WB_JEDEC_ID);
-  *b1 = SPI.transfer(0); // manufacturer id
-  *b2 = SPI.transfer(0); // memory type
-  *b3 = SPI.transfer(0); // capacity
-  digitalWrite(CS, HIGH);
-  not_busy();
-}  
-
-/*
- * See the timing diagram in section 9.2.26 of the
- * data sheet, "Chip Erase (C7h / 06h)". (Note:
- * either opcode works.)
- */
-void _chip_erase(void) {
-  digitalWrite(CS, HIGH);
-  digitalWrite(CS, LOW);  
-  SPI.transfer(WB_WRITE_ENABLE);
-  digitalWrite(CS, HIGH);
-  digitalWrite(CS, LOW);
-  SPI.transfer(WB_CHIP_ERASE);
-  digitalWrite(CS, HIGH);
-  /* See notes on rev 2 
-  digitalWrite(CS, LOW);  
-  SPI.transfer(WB_WRITE_DISABLE);
-  digitalWrite(CS, HIGH);
-  */
-  not_busy();
-}
-
-/*
- * See the timing diagram in section 9.2.10 of the
- * data sheet, "Read Data (03h)".
- */
-void _read_page(word page_number, byte *page_buffer) {
-  digitalWrite(CS, HIGH);
-  digitalWrite(CS, LOW);
-  SPI.transfer(WB_READ_DATA);
-  // Construct the 24-bit address from the 16-bit page
-  // number and 0x00, since we will read 256 bytes (one
-  // page).
-  SPI.transfer((page_number >> 8) & 0xFF);
-  SPI.transfer((page_number >> 0) & 0xFF);
-  SPI.transfer(0);
-  for (int i = 0; i < 256; ++i) {
-    page_buffer[i] = SPI.transfer(0);
-  }
-  digitalWrite(CS, HIGH);
-  not_busy();
-}
- 
-/*
- * See the timing diagram in section 9.2.21 of the
- * data sheet, "Page Program (02h)".
- */
-void _write_page(word page_number, byte *page_buffer) {
-  digitalWrite(CS, HIGH);
-  digitalWrite(CS, LOW);  
-  SPI.transfer(WB_WRITE_ENABLE);
-  digitalWrite(CS, HIGH);
-  digitalWrite(CS, LOW);  
-  SPI.transfer(WB_PAGE_PROGRAM);
-  SPI.transfer((page_number >>  8) & 0xFF);
-  SPI.transfer((page_number >>  0) & 0xFF);
-  SPI.transfer(0);
-  for (int i = 0; i < 256; ++i) {
-    SPI.transfer(page_buffer[i]);
-  }
-  digitalWrite(CS, HIGH);
-  /* See notes on rev 2
-  digitalWrite(CS, LOW);  
-  SPI.transfer(WB_WRITE_DISABLE);
-  digitalWrite(CS, HIGH);
-  */
-  not_busy();
-}
-
-void test_write(word page) {
-  char buf[80];
-  sprintf(buf, "command: test_write\n");
-  DBG_OUTPUT_PORT.print(buf);
-  uint8_t page_data[256];
-  for (uint8_t i = 0 ; ; i++) {
-    yield();
-    page_data[i] = i;
-    if (i == 255) {
-      break;
-    }
-  }
-  _write_page(page, page_data);
-  DBG_OUTPUT_PORT.print("Ready\n");
-}
-
-/* 
- * not_busy() polls the status bit of the device until it
- * completes the current operation. Most operations finish
- * in a few hundred microseconds or less, but chip erase 
- * may take 500+ms. Finish all operations with this poll.
- *
- * See section 9.2.8 of the datasheet
- */
-void not_busy(void) {
-  digitalWrite(CS, HIGH);  
-  digitalWrite(CS, LOW);
-  SPI.transfer(WB_READ_STATUS_REG_1);       
-  while (SPI.transfer(0) & 1) {
-    yield();
-  }; 
-  digitalWrite(CS, HIGH);  
-}
-
-/*void setup(void) {
-}*/
-
-void displayMenu(void) {
-  DBG_OUTPUT_PORT.print("1: get jedec id\n");
-  DBG_OUTPUT_PORT.print("2: erase flash\n");
-  DBG_OUTPUT_PORT.print("3: read page\n");
-  DBG_OUTPUT_PORT.print("4: read all pages\n");
-  DBG_OUTPUT_PORT.print("t: fill pages with test data\n");
-  DBG_OUTPUT_PORT.print("7: upload data\n");
-  DBG_OUTPUT_PORT.print("0: display this menu\n");
-  DBG_OUTPUT_PORT.print("> ");
-}
-
-/*
-char cmd = '_';
-char s_addr[] = "........";
-
-void loop(void) {
-    word page;
-    if (DBG_OUTPUT_PORT.available() > 0) {
-      cmd = DBG_OUTPUT_PORT.read();
-      DBG_OUTPUT_PORT.print("\n");
-      switch (cmd) {
-
-        case '0':
-          displayMenu();
-          break;
-  
-        case '1':
-          get_jedec_id();
-          displayMenu();
-          break;
-  
-        case '2':
-          chip_erase();
-          displayMenu();
-          break;
-
-        case '3':
-          DBG_OUTPUT_PORT.print("\naddress? ");
-          page = (word) DBG_OUTPUT_PORT.parseInt();
-          read_page(page);
-          displayMenu();
-          break;
-
-        case '4':
-          read_all_pages();
-          displayMenu();
-          break;
-  
-        case '7':
-          //upload_data();
-          displayMenu();
-          break;
-
-        case 't':
-          DBG_OUTPUT_PORT.print("\naddress? ");
-          DBG_OUTPUT_PORT.print("\n");
-          test_write((word) DBG_OUTPUT_PORT.parseInt());
-          displayMenu();
-          break;
-      }
-    }
-}
-*/
