@@ -34,6 +34,9 @@ char otaPassword[64];
 const char* host = "dc-firmware-manager";
 const char* WiFiAPPSK = "geheim1234";
 IPAddress ipAddress( 192, 168, 4, 1 );
+bool inInitialSetupMode = false;
+
+String debug;
 
 const uint8_t empty_buffer[256] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
@@ -41,32 +44,6 @@ ESP8266WebServer server(80);
 SPIFlash flash(CS);
 //holds the current upload
 File fsUploadFile;
-
-void print_page_bytes(unsigned int page, const byte *page_buffer) {
-    char buf[10];
-    DBG_OUTPUT_PORT.print(String(page));
-    DBG_OUTPUT_PORT.println(":");
-    for (int i = 0; i < 16; ++i) {
-        for (int j = 0; j < 16; ++j) {
-            sprintf(buf, "%02x", page_buffer[i * 16 + j]);
-            DBG_OUTPUT_PORT.print(buf);
-        }
-        DBG_OUTPUT_PORT.println();
-    }
-}
-
-//format bytes
-String formatBytes(size_t bytes){
-    if (bytes < 1024){
-        return String(bytes)+"B";
-    } else if(bytes < (1024 * 1024)){
-        return String(bytes/1024.0)+"KB";
-    } else if(bytes < (1024 * 1024 * 1024)){
-        return String(bytes/1024.0/1024.0)+"MB";
-    } else {
-        return String(bytes/1024.0/1024.0/1024.0)+"GB";
-    }
-}
 
 String getContentType(String filename){
     if(server.hasArg("download")) return "application/octet-stream";
@@ -103,17 +80,27 @@ bool handleFileRead(String path){
     return false;
 }
 
+/*
+    curl -D - -F "file=@$PWD/output_file.rbf" "http://dc-firmware-manager.local/upload-firmware?size=368011"
+*/
 void handleFileUpload(){
     HTTPUpload& upload = server.upload();
+    int totalSize = server.arg("size").toInt();
+
     if (upload.status == UPLOAD_FILE_START) {
-        fsUploadFile = SPIFFS.open("flash.bin", "w");
+        fsUploadFile = SPIFFS.open("/flash.bin", "w");
+        server.sendContent("Receiving flash.bin:\n");
     } else if (upload.status == UPLOAD_FILE_WRITE) {
         if (fsUploadFile) {
             fsUploadFile.write(upload.buf, upload.currentSize);
+            server.sendContent(String(upload.totalSize) + "/" + totalSize + "\n");
         }
     } else if (upload.status == UPLOAD_FILE_END) {
         if (fsUploadFile) {
             fsUploadFile.close();
+            server.sendContent(String(upload.totalSize) + "/" + totalSize + "\n");
+            server.sendContent(""); // *** END 1/2 ***
+            server.client().stop(); // *** END 2/2 ***    
         }
     }
 }
@@ -129,7 +116,8 @@ void _readCredentials(const char *filename, char *target) {
     }
 }
 
-void readCredentials(void) {
+void setupCredentials(void) {
+    DBG_OUTPUT_PORT.printf("Reading stored passwords...\n");
     _readCredentials("/ssid.txt", ssid);
     _readCredentials("/password.txt", password);
     _readCredentials("/ota-pass.txt", otaPassword);
@@ -155,6 +143,7 @@ void setupAPMode(void) {
     DBG_OUTPUT_PORT.println(AP_NameChar);
     DBG_OUTPUT_PORT.print("APPSK: ");
     DBG_OUTPUT_PORT.println(WiFiAPPSK);
+    inInitialSetupMode = true;
 }
 
 bool copyBlockwise(String source, String destination, unsigned int length) {
@@ -184,6 +173,36 @@ void initBuffer(uint8_t *buffer) {
     }
 }
 
+void handleFileList() {
+    if (!server.hasArg("dir")) {
+        server.send(500, "text/plain", "BAD ARGS"); 
+        return;
+    }
+    
+    String path = server.arg("dir");
+    DBG_OUTPUT_PORT.println("handleFileList: " + path);
+    Dir dir = SPIFFS.openDir(path);
+    path = String();
+    
+    String output = "[";
+    while(dir.next()){
+        File entry = dir.openFile("r");
+        if (output != "[") output += ',';
+        bool isDir = false;
+        output += "{\"type\":\"";
+        output += (isDir)?"dir":"file";
+        output += "\",\"name\":\"";
+        output += String(entry.name()).substring(1);
+        output += "\",\"length\":\"";
+        output += String(entry.size());
+        output += "\"}";
+        entry.close();
+    }
+    
+    output += "]";
+    server.send(200, "text/json", output);
+}
+
 void handleProgramFlash() {
     unsigned int page = 0;
     uint8_t buffer[256];
@@ -196,12 +215,13 @@ void handleProgramFlash() {
     server.setContentLength(CONTENT_LENGTH_UNKNOWN); // *** BEGIN ***
     server.send(200, "text/plain", "");
     
-    File f = SPIFFS.open("/output_file.rbf", "r");
+    File f = SPIFFS.open("/flash.bin", "r");
+    int pagesToProgram = f.size() / 256;
     if (f) {
         flash.enable();
         flash.chip_erase();
         while (f.readBytes((char *) buffer, 256) && page < PAGES) {
-            server.sendContent(String(page) + "\n");
+            server.sendContent(String(page) + "/" + pagesToProgram + "\n");
             flash.page_write(page, buffer);
             // cleanup buffer
             initBuffer(buffer);
@@ -218,43 +238,33 @@ void handleProgramFlash() {
 void handleDownloadFirmware() {
     uint8_t page_buffer[256];
     unsigned int last_page = 0;
-    const char* temp_filename = "/flash.raw.bin";
-    
-    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    server.sendHeader("Pragma", "no-cache");
-    server.sendHeader("Expires", "-1");
-    server.setContentLength(CONTENT_LENGTH_UNKNOWN); // *** BEGIN ***
-    server.send(200, "text/plain", "");
-    
-    File f = SPIFFS.open(temp_filename, "w");
-    if (f) {
-        server.sendContent("read from flash:\n");
-        flash.enable();
-        for (unsigned int i = 0; i < PAGES; ++i) {
-            server.sendContent(String(i));
-            server.sendContent("\n");
-            flash.page_read(i, page_buffer);
-            f.write(page_buffer, 256); 
-            if (strcmp((const char*) page_buffer, (const char*) empty_buffer) != 0) {
-                last_page = i;
-            }
-        }
-        flash.disable();
-        server.sendContent("last_page:" + String(last_page) + "\n");
-        //copyBlockwise(temp_filename, "/flash.bin", last_page);
-        //SPIFFS.remove(temp_filename);
-        f.close();
+    WiFiClient client = server.client();
+
+    client.print("HTTP/1.1 200 OK\r\n");
+    client.print("Content-Disposition: attachment; filename=flash.raw.bin\r\n");
+    client.print("Content-Type: application/octet-stream\r\n");
+    client.print("Content-Length: -1\r\n");
+    client.print("Connection: close\r\n");
+    client.print("Access-Control-Allow-Origin: *\r\n");
+    client.print("\r\n");
+
+    flash.enable();
+    for (unsigned int i = 0; i < PAGES; ++i) {
+        flash.page_read(i, page_buffer);
+        client.write((const char*) page_buffer, 256);
     }
-    
-    server.sendContent(""); // *** END 1/2 ***
-    server.client().stop(); // *** END 2/2 ***
+    flash.disable();
+    client.stop();
 }
 
 void setupArduinoOTA() {
-
+    DBG_OUTPUT_PORT.printf("Setting up ArduinoOTA...\n");
+    
     ArduinoOTA.setPort(8266);
     ArduinoOTA.setHostname(host);
-    ArduinoOTA.setPassword(otaPassword);
+    if (strlen(otaPassword)) {
+        ArduinoOTA.setPassword(otaPassword);
+    }
     
     ArduinoOTA.onStart([]() {
         Serial.println("Start");
@@ -276,30 +286,22 @@ void setupArduinoOTA() {
     ArduinoOTA.begin();
     Serial.println("Ready");
     Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
+    Serial.println(ipAddress);
 }
 
-void setup(void){
-    DBG_OUTPUT_PORT.begin(115200);
-    DBG_OUTPUT_PORT.print("\n");
-    DBG_OUTPUT_PORT.setDebugOutput(true);
-    SPIFFS.begin();
-    {
-        Dir dir = SPIFFS.openDir("/");
-        while (dir.next()) {    
-            String fileName = dir.fileName();
-            size_t fileSize = dir.fileSize();
-            DBG_OUTPUT_PORT.printf("FS File: %s, size: %s\n", fileName.c_str(), formatBytes(fileSize).c_str());
-        }
-        DBG_OUTPUT_PORT.printf("\n");
-    }
-    
-    readCredentials();
-    
+void setupWiFi() {
     //WIFI INIT
+    WiFi.softAPdisconnect(true);
+    WiFi.setAutoConnect(true);
+    WiFi.setAutoReconnect(true);
+    WiFi.mode(WIFI_STA);
+    
+    debug += "WiFi.getAutoConnect: " + String(WiFi.getAutoConnect()) + "\n";
+
     DBG_OUTPUT_PORT.printf("Connecting to %s\n", ssid);
     if (String(WiFi.SSID()) != String(ssid)) {
         WiFi.begin(ssid, password);
+        debug += "WiFi.begin: " + String(password) + "@" + String(ssid) + "\n";
     }
     
     bool success = true;
@@ -313,7 +315,9 @@ void setup(void){
             break;
         }
         tries++;
+        debug += "." + String(tries);
     }
+    debug += "success: " + String(success) + "\n";
     if (!success) {
         // setup AP mode to configure ssid and password
         setupAPMode();
@@ -331,16 +335,70 @@ void setup(void){
         DBG_OUTPUT_PORT.print(host);
         DBG_OUTPUT_PORT.println(".local/edit to see the file browser");
     }
-    
+}
+
+void setupHTTPServer() {
+    DBG_OUTPUT_PORT.printf("Setting up HTTP server...\n");
+
+    server.on("/list", HTTP_GET, handleFileList);
     server.on("/flash-firmware", HTTP_GET, handleProgramFlash);
     server.on("/download-firmware", HTTP_GET, handleDownloadFirmware);
+    server.on("/delete-downloaded-firmware", HTTP_GET, [](){ 
+        SPIFFS.remove("/flash.raw.bin");
+    });
+    server.on("/upload-firmware", HTTP_POST, [](){ 
+        server.setContentLength(CONTENT_LENGTH_UNKNOWN); // *** BEGIN ***
+        server.send(200, "text/plain", ""); 
+    }, handleFileUpload);
+    
+    server.on("/debug", HTTP_GET, [](){
+        server.send(200, "text/plain", 
+              debug + "\n"
+            + "[" + String(ssid) + "]\n"
+            + "[" + String(password) + "]\n"
+            + "[" + String(otaPassword) + "]\n"
+            + "[" + String(ipAddress) + "]\n"
+        );
+        WiFi.printDiag(DBG_OUTPUT_PORT);
+    });
     server.onNotFound([](){
         if (!handleFileRead(server.uri())) {
             server.send(404, "text/plain", "FileNotFound");
         }
     });
+    server.begin();
+}
 
-    if (strlen(otaPassword)) {
+void setupSPIFFS() {
+    DBG_OUTPUT_PORT.printf("Setting up SPIFFS...\n");
+    SPIFFS.begin();
+    {
+        Dir dir = SPIFFS.openDir("/");
+        while (dir.next()) {    
+            String fileName = dir.fileName();
+            size_t fileSize = dir.fileSize();
+            DBG_OUTPUT_PORT.printf("FS File: %s, size: %lu\n", fileName.c_str(), fileSize);
+        }
+        DBG_OUTPUT_PORT.printf("\n");
+    }
+}
+
+void setupDebug() {
+    DBG_OUTPUT_PORT.begin(115200);
+    DBG_OUTPUT_PORT.print("\n");
+    DBG_OUTPUT_PORT.print("FirmwareManager starting...\n");
+    DBG_OUTPUT_PORT.setDebugOutput(true);
+}
+
+void setup(void){
+
+    setupDebug();
+    setupSPIFFS();
+    setupCredentials();
+    setupWiFi();
+    setupHTTPServer();
+    
+    if (inInitialSetupMode || strlen(otaPassword)) {
         setupArduinoOTA();
     }
 }
