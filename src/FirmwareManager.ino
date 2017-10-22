@@ -69,7 +69,7 @@ String getContentType(String filename){
 
 bool handleFileRead(String path){
     if (path.endsWith("/")) {
-        path += "index.htm";
+        path += "index.html";
     }
     String contentType = getContentType(path);
     String pathWithGz = path + ".gz";
@@ -286,7 +286,15 @@ void handleDumpFirmware() {
 /*
     curl -D - -F "file=@$PWD/output_file.rbf" "http://dc-firmware-manager.local/upload-firmware?size=368011"
 */
-void handleUploadFirmware(){
+void handleUploadFirmware() {
+    handleUpload(FIRMWARE_FILE);
+}
+
+void handleUploadIndexHtml() {
+    handleUpload("/index.html");
+}    
+
+void handleUpload(const char* filename) {
     if (!_isAuthenticated()) {
         return;
     }
@@ -295,8 +303,8 @@ void handleUploadFirmware(){
     int totalSize = server.arg("size").toInt();
 
     if (upload.status == UPLOAD_FILE_START) {
-        fsUploadFile = SPIFFS.open(FIRMWARE_FILE, "w");
-        DBG_OUTPUT_PORT.printf(">> Receiving firmware.rdf\n");
+        fsUploadFile = SPIFFS.open(filename, "w");
+        DBG_OUTPUT_PORT.printf(">> Receiving %s\n", filename);
     } else if (upload.status == UPLOAD_FILE_WRITE) {
         if (fsUploadFile) {
             fsUploadFile.write(upload.buf, upload.currentSize);
@@ -305,7 +313,7 @@ void handleUploadFirmware(){
     } else if (upload.status == UPLOAD_FILE_END) {
         if (fsUploadFile) {
             fsUploadFile.close();
-            writeMD5FileForFilename(FIRMWARE_FILE);
+            writeMD5FileForFilename(filename);
             DBG_OUTPUT_PORT.printf(">> %i/%i\n", upload.totalSize, totalSize);
             DBG_OUTPUT_PORT.printf(">> Done.\n");
         }
@@ -482,7 +490,7 @@ bool _isAuthenticated() {
 
 bool isAuthenticated() {
     if (!_isAuthenticated()) {
-        server.requestAuthentication(DIGEST_AUTH, "Secure Zone", "Please login!\n");
+        server.requestAuthentication(BASIC_AUTH/*DIGEST_AUTH*/, "Secure Zone", "Please login!\n");
         return false;
     }
     return true;
@@ -514,6 +522,11 @@ void setupHTTPServer() {
             server.send(200, "text/plain", "");
         }
     }, handleUploadFirmware);
+    server.on("/upload-index", HTTP_POST, []() {
+        if (isAuthenticated()) {
+            server.send(200, "text/plain", "");
+        }
+    }, handleUploadIndexHtml);
         
     server.onNotFound([]() {
         if (isAuthenticated()) {
