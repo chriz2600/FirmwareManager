@@ -2,6 +2,6 @@
 .piolibdeps
 .vscode
 .vscode/c_cpp_properties.json
-data/password.txt
-data/ssid.txt
-data/ota-pass.txt
+data/etc/password
+data/etc/ssid
+data/etc/ota_pass

@@ -18,6 +18,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266HTTPClient.h>
 #include <ESP8266mDNS.h>
 #include <FS.h>
 #include <WiFiUdp.h>
@@ -26,17 +27,20 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #define CS 16
 #define DBG_OUTPUT_PORT Serial
+#define FIRMWARE_FILE "/firmware.rdf"
+#define FIRMWARE_URL "http://dc.i74.de/flash.rbf"
+
 #define PAGES 8192 // 8192 pages x 256 bytes = 2MB = 16MBit
+#define DEBUG true
 
 char ssid[64];
 char password[64];
 char otaPassword[64]; 
+char firmwareUrl[1024] = FIRMWARE_URL;
 const char* host = "dc-firmware-manager";
 const char* WiFiAPPSK = "geheim1234";
 IPAddress ipAddress( 192, 168, 4, 1 );
 bool inInitialSetupMode = false;
-
-String debug;
 
 const uint8_t empty_buffer[256] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
@@ -80,47 +84,24 @@ bool handleFileRead(String path){
     return false;
 }
 
-/*
-    curl -D - -F "file=@$PWD/output_file.rbf" "http://dc-firmware-manager.local/upload-firmware?size=368011"
-*/
-void handleFileUpload(){
-    HTTPUpload& upload = server.upload();
-    int totalSize = server.arg("size").toInt();
-
-    if (upload.status == UPLOAD_FILE_START) {
-        fsUploadFile = SPIFFS.open("/flash.bin", "w");
-        server.sendContent("Receiving flash.bin:\n");
-    } else if (upload.status == UPLOAD_FILE_WRITE) {
-        if (fsUploadFile) {
-            fsUploadFile.write(upload.buf, upload.currentSize);
-            server.sendContent(String(upload.totalSize) + "/" + totalSize + "\n");
-        }
-    } else if (upload.status == UPLOAD_FILE_END) {
-        if (fsUploadFile) {
-            fsUploadFile.close();
-            server.sendContent(String(upload.totalSize) + "/" + totalSize + "\n");
-            server.sendContent(""); // *** END 1/2 ***
-            server.client().stop(); // *** END 2/2 ***    
-        }
-    }
-}
-
-void _readCredentials(const char *filename, char *target) {
+void _readFile(const char *filename, char *target, size_t len) {
     bool exists = SPIFFS.exists(filename);
     if (exists) {
         File f = SPIFFS.open(filename, "r");
         if (f) {
-            f.readString().toCharArray(target, 64);
+            f.readString().toCharArray(target, len);
             f.close();
+            DBG_OUTPUT_PORT.printf(">> %s: [%s]\n", filename, target);
         }
     }
 }
 
 void setupCredentials(void) {
-    DBG_OUTPUT_PORT.printf("Reading stored passwords...\n");
-    _readCredentials("/ssid.txt", ssid);
-    _readCredentials("/password.txt", password);
-    _readCredentials("/ota-pass.txt", otaPassword);
+    DBG_OUTPUT_PORT.printf(">> Reading stored values...\n");
+    _readFile("/etc/ssid", ssid, 64);
+    _readFile("/etc/password", password, 64);
+    _readFile("/etc/ota_pass", otaPassword, 64);
+    _readFile("/etc/firmware_url", firmwareUrl, 1024);
 }
 
 void setupAPMode(void) {
@@ -139,10 +120,8 @@ void setupAPMode(void) {
     AP_NameChar[i] = AP_NameString.charAt(i);
     
     WiFi.softAP(AP_NameChar, WiFiAPPSK);
-    DBG_OUTPUT_PORT.print("SSID: ");
-    DBG_OUTPUT_PORT.println(AP_NameChar);
-    DBG_OUTPUT_PORT.print("APPSK: ");
-    DBG_OUTPUT_PORT.println(WiFiAPPSK);
+    DBG_OUTPUT_PORT.printf(">> SSID:   %s\n", AP_NameChar);
+    DBG_OUTPUT_PORT.printf(">> AP-PSK: %s\n", WiFiAPPSK);
     inInitialSetupMode = true;
 }
 
@@ -180,7 +159,7 @@ void handleFileList() {
     }
     
     String path = server.arg("dir");
-    DBG_OUTPUT_PORT.println("handleFileList: " + path);
+    DBG_OUTPUT_PORT.println(">> handleFileList: " + path);
     Dir dir = SPIFFS.openDir(path);
     path = String();
     
@@ -215,7 +194,7 @@ void handleProgramFlash() {
     server.setContentLength(CONTENT_LENGTH_UNKNOWN); // *** BEGIN ***
     server.send(200, "text/plain", "");
     
-    File f = SPIFFS.open("/flash.bin", "r");
+    File f = SPIFFS.open(FIRMWARE_FILE, "r");
     int pagesToProgram = f.size() / 256;
     if (f) {
         flash.enable();
@@ -235,7 +214,7 @@ void handleProgramFlash() {
     server.client().stop(); // *** END 2/2 ***
 }
 
-void handleDownloadFirmware() {
+void handleDumpFirmware() {
     uint8_t page_buffer[256];
     unsigned int last_page = 0;
     WiFiClient client = server.client();
@@ -257,36 +236,129 @@ void handleDownloadFirmware() {
     client.stop();
 }
 
+/*
+    curl -D - -F "file=@$PWD/output_file.rbf" "http://dc-firmware-manager.local/upload-firmware?size=368011"
+*/
+void handleUploadFirmware(){
+    HTTPUpload& upload = server.upload();
+    int totalSize = server.arg("size").toInt();
+
+    if (upload.status == UPLOAD_FILE_START) {
+        fsUploadFile = SPIFFS.open(FIRMWARE_FILE, "w");
+        DBG_OUTPUT_PORT.printf(">> Receiving firmware.rdf\n");
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (fsUploadFile) {
+            fsUploadFile.write(upload.buf, upload.currentSize);
+            DBG_OUTPUT_PORT.printf(">> %i/%i\n", upload.totalSize, totalSize);
+        }
+    } else if (upload.status == UPLOAD_FILE_END) {
+        if (fsUploadFile) {
+            fsUploadFile.close();
+            DBG_OUTPUT_PORT.printf(">> %i/%i\n", upload.totalSize, totalSize);
+            DBG_OUTPUT_PORT.printf(">> Done.\n");
+        }
+    }
+}
+    
+void handleDownloadFirmware() {
+    HTTPClient http;
+
+    DBG_OUTPUT_PORT.printf(">> [HTTP] begin...\n");
+    http.begin(firmwareUrl);
+    
+    DBG_OUTPUT_PORT.printf(">> [HTTP] GET...\n");
+    int httpCode = http.GET();
+    if (httpCode > 0) {
+        DBG_OUTPUT_PORT.printf(">> [HTTP] GET... code: %d\n", httpCode);
+        // file found at server
+        if (httpCode == HTTP_CODE_OK) {
+            // get lenght of document (is -1 when Server sends no Content-Length header)
+            int len = http.getSize();
+            
+            File f = SPIFFS.open(FIRMWARE_FILE, "w");
+            if (f) {
+                // create buffer for read
+                uint8_t buff[256] = { 0 };
+
+                // get tcp stream
+                WiFiClient * stream = http.getStreamPtr();
+
+                // read all data from server
+                while (http.connected() && (len > 0 || len == -1)) {
+                    // get available data size
+                    size_t size = stream->available();
+                    size_t bytes2read;
+
+                    if (size) {
+                        bytes2read = ((size > sizeof(buff)) ? sizeof(buff) : size);
+                        // read up to buff size bytes
+                        int c = stream->readBytes(buff, bytes2read);
+                        f.write(buff, bytes2read);
+
+                        // write it to Serial
+                        DBG_OUTPUT_PORT.printf("Got: %i/%i, %i\n", c, len, bytes2read);
+                        //server.sendContent(String(len) + "\n");
+                        
+                        if(len > 0) {
+                            len -= c;
+                        }
+                    }
+                    yield();
+                }
+                f.close();
+            }
+
+            DBG_OUTPUT_PORT.print("\n>> [HTTP] connection closed or file end.\n");
+            if (len == 0) {
+                server.send(200, "text/plain", "OK: firmware downloaded.\n");
+            } else {
+                server.send(200, "text/plain", "WARNING: firmware downloaded, but length unchecked.\n");
+            }
+        } else {
+            server.send(200, "text/plain", "ERROR: firmware NOT downloaded.\n");
+        }
+    } else {
+        DBG_OUTPUT_PORT.printf(">> [HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+        server.send(200, "text/plain", "ERROR: connect failed\n");
+    }
+
+    http.end();
+}
+
 void setupArduinoOTA() {
-    DBG_OUTPUT_PORT.printf("Setting up ArduinoOTA...\n");
+    DBG_OUTPUT_PORT.printf(">> Setting up ArduinoOTA...\n");
     
     ArduinoOTA.setPort(8266);
     ArduinoOTA.setHostname(host);
+
     if (strlen(otaPassword)) {
         ArduinoOTA.setPassword(otaPassword);
     }
     
     ArduinoOTA.onStart([]() {
-        Serial.println("Start");
+        DBG_OUTPUT_PORT.println("ArduinoOTA >> Start");
     });
     ArduinoOTA.onEnd([]() {
-        Serial.println("\nEnd");
+        DBG_OUTPUT_PORT.println("\nArduinoOTA >> End");
     });
     ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-        Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+        DBG_OUTPUT_PORT.printf("ArduinoOTA >> Progress: %u%%\r", (progress / (total / 100)));
     });
     ArduinoOTA.onError([](ota_error_t error) {
-        Serial.printf("Error[%u]: ", error);
-        if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-        else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-        else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-        else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-        else if (error == OTA_END_ERROR) Serial.println("End Failed");
+        DBG_OUTPUT_PORT.printf("ArduinoOTA >> Error[%u]: ", error);
+        if (error == OTA_AUTH_ERROR) {
+            DBG_OUTPUT_PORT.println("ArduinoOTA >> Auth Failed");
+        } else if (error == OTA_BEGIN_ERROR) {
+            DBG_OUTPUT_PORT.println("ArduinoOTA >> Begin Failed");
+        } else if (error == OTA_CONNECT_ERROR) {
+            DBG_OUTPUT_PORT.println("ArduinoOTA >> Connect Failed");
+        } else if (error == OTA_RECEIVE_ERROR) {
+            DBG_OUTPUT_PORT.println("ArduinoOTA >> Receive Failed");
+        } else if (error == OTA_END_ERROR) {
+            DBG_OUTPUT_PORT.println("ArduinoOTA >> End Failed");
+        }
     });
     ArduinoOTA.begin();
-    Serial.println("Ready");
-    Serial.print("IP address: ");
-    Serial.println(ipAddress);
 }
 
 void setupWiFi() {
@@ -296,12 +368,12 @@ void setupWiFi() {
     WiFi.setAutoReconnect(true);
     WiFi.mode(WIFI_STA);
     
-    debug += "WiFi.getAutoConnect: " + String(WiFi.getAutoConnect()) + "\n";
+    DBG_OUTPUT_PORT.printf(">> WiFi.getAutoConnect: %i\n", WiFi.getAutoConnect());
+    DBG_OUTPUT_PORT.printf(">> Connecting to %s\n", ssid);
 
-    DBG_OUTPUT_PORT.printf("Connecting to %s\n", ssid);
     if (String(WiFi.SSID()) != String(ssid)) {
         WiFi.begin(ssid, password);
-        debug += "WiFi.begin: " + String(password) + "@" + String(ssid) + "\n";
+        DBG_OUTPUT_PORT.printf(">> WiFi.begin: %s@%s\n", password, ssid);
     }
     
     bool success = true;
@@ -315,53 +387,43 @@ void setupWiFi() {
             break;
         }
         tries++;
-        debug += "." + String(tries);
     }
-    debug += "success: " + String(success) + "\n";
+
+    DBG_OUTPUT_PORT.printf(">> success: %i\n", success);
+
     if (!success) {
         // setup AP mode to configure ssid and password
         setupAPMode();
     } else {
         ipAddress = WiFi.localIP();
-        DBG_OUTPUT_PORT.println("");
-        DBG_OUTPUT_PORT.print("Connected! IP address: ");
-        DBG_OUTPUT_PORT.println(ipAddress);
+        DBG_OUTPUT_PORT.printf(
+            ">> Connected! IP address: %d.%d.%d.%d\n", 
+            ipAddress[0], ipAddress[1], ipAddress[2], ipAddress[3]
+        );
     }
     
     if (MDNS.begin(host, ipAddress)) {
-        DBG_OUTPUT_PORT.println("mDNS started");
+        DBG_OUTPUT_PORT.println(">> mDNS started");
         MDNS.addService("http", "tcp", 80);
-        DBG_OUTPUT_PORT.print("Open http://");
-        DBG_OUTPUT_PORT.print(host);
-        DBG_OUTPUT_PORT.println(".local/edit to see the file browser");
+        DBG_OUTPUT_PORT.printf(
+            ">> http://%s.local/\n", 
+            host
+        );
     }
 }
 
 void setupHTTPServer() {
-    DBG_OUTPUT_PORT.printf("Setting up HTTP server...\n");
+    DBG_OUTPUT_PORT.printf(">> Setting up HTTP server...\n");
 
     server.on("/list", HTTP_GET, handleFileList);
-    server.on("/flash-firmware", HTTP_GET, handleProgramFlash);
-    server.on("/download-firmware", HTTP_GET, handleDownloadFirmware);
-    server.on("/delete-downloaded-firmware", HTTP_GET, [](){ 
-        SPIFFS.remove("/flash.raw.bin");
-    });
-    server.on("/upload-firmware", HTTP_POST, [](){ 
-        server.setContentLength(CONTENT_LENGTH_UNKNOWN); // *** BEGIN ***
+    server.on("/dump", HTTP_GET, handleDumpFirmware);
+    server.on("/flash", HTTP_GET, handleProgramFlash);
+    server.on("/download", HTTP_GET, handleDownloadFirmware);
+    server.on("/upload", HTTP_POST, []() { 
         server.send(200, "text/plain", ""); 
-    }, handleFileUpload);
-    
-    server.on("/debug", HTTP_GET, [](){
-        server.send(200, "text/plain", 
-              debug + "\n"
-            + "[" + String(ssid) + "]\n"
-            + "[" + String(password) + "]\n"
-            + "[" + String(otaPassword) + "]\n"
-            + "[" + String(ipAddress) + "]\n"
-        );
-        WiFi.printDiag(DBG_OUTPUT_PORT);
-    });
-    server.onNotFound([](){
+    }, handleUploadFirmware);
+        
+    server.onNotFound([]() {
         if (!handleFileRead(server.uri())) {
             server.send(404, "text/plain", "FileNotFound");
         }
@@ -370,37 +432,37 @@ void setupHTTPServer() {
 }
 
 void setupSPIFFS() {
-    DBG_OUTPUT_PORT.printf("Setting up SPIFFS...\n");
+    DBG_OUTPUT_PORT.printf(">> Setting up SPIFFS...\n");
     SPIFFS.begin();
     {
         Dir dir = SPIFFS.openDir("/");
         while (dir.next()) {    
             String fileName = dir.fileName();
             size_t fileSize = dir.fileSize();
-            DBG_OUTPUT_PORT.printf("FS File: %s, size: %lu\n", fileName.c_str(), fileSize);
+            DBG_OUTPUT_PORT.printf(">> %s (%lu)\n", fileName.c_str(), fileSize);
         }
         DBG_OUTPUT_PORT.printf("\n");
     }
 }
 
-void setupDebug() {
+void setup(void) {
+
     DBG_OUTPUT_PORT.begin(115200);
-    DBG_OUTPUT_PORT.print("\n");
-    DBG_OUTPUT_PORT.print("FirmwareManager starting...\n");
-    DBG_OUTPUT_PORT.setDebugOutput(true);
-}
+    DBG_OUTPUT_PORT.printf("\n>> FirmwareManager starting...\n");
+    DBG_OUTPUT_PORT.setDebugOutput(DEBUG);
 
-void setup(void){
-
-    setupDebug();
     setupSPIFFS();
     setupCredentials();
     setupWiFi();
     setupHTTPServer();
     
-    if (inInitialSetupMode || strlen(otaPassword)) {
+    if (DEBUG 
+     || strlen(otaPassword)) 
+    {
         setupArduinoOTA();
     }
+
+    DBG_OUTPUT_PORT.println(">> Ready.");
 }
 
 void loop(void){
