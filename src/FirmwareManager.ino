@@ -26,6 +26,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <SPIFlash.h>
 
 #define CS 16
+#define NCONFIG 5
 #define DBG_OUTPUT_PORT Serial
 #define FIRMWARE_FILE "/firmware.rdf"
 #define FIRMWARE_URL "http://dc.i74.de/flash.rbf"
@@ -84,16 +85,38 @@ bool handleFileRead(String path){
     return false;
 }
 
-void _readFile(const char *filename, char *target, size_t len) {
+void _writeFile(const char *filename, const char *towrite, unsigned int len) {
+    File f = SPIFFS.open(filename, "w");
+    if (f) {
+        f.write((const uint8_t*) towrite, len);
+        f.close();
+        DBG_OUTPUT_PORT.printf(">> _writeFile: %s:[%s]\n", filename, towrite);
+    }
+}
+
+void _readFile(const char *filename, char *target, unsigned int len) {
     bool exists = SPIFFS.exists(filename);
     if (exists) {
         File f = SPIFFS.open(filename, "r");
         if (f) {
             f.readString().toCharArray(target, len);
             f.close();
-            DBG_OUTPUT_PORT.printf(">> %s: [%s]\n", filename, target);
+            DBG_OUTPUT_PORT.printf(">> _readFile: %s:[%s]\n", filename, target);
         }
     }
+}
+
+String _md5sum(File f) {
+    if (f && f.seek(0, SeekSet)) {
+        MD5Builder md5;
+        md5.begin();
+        md5.addStream(f, f.size());
+        md5.calculate();
+        // rewind back to start
+        f.seek(0, SeekSet);
+        return md5.toString();
+    }
+    return String();
 }
 
 void setupCredentials(void) {
@@ -197,10 +220,12 @@ void handleProgramFlash() {
     File f = SPIFFS.open(FIRMWARE_FILE, "r");
     int pagesToProgram = f.size() / 256;
     if (f) {
+        String md5sum = _md5sum(f);
         flash.enable();
         flash.chip_erase();
         while (f.readBytes((char *) buffer, 256) && page < PAGES) {
             server.sendContent(String(page) + "/" + pagesToProgram + "\n");
+            reverseBitOrder(buffer);
             flash.page_write(page, buffer);
             // cleanup buffer
             initBuffer(buffer);
@@ -208,10 +233,31 @@ void handleProgramFlash() {
         }
         flash.disable();
         f.close();
+        _writeFile("/etc/last_flash_md5", md5sum.c_str(), md5sum.length());
     }
     
+    server.sendContent("FPGA reset...\n");
+    resetFPGAConfiguration();
+    server.sendContent("done\n");
     server.sendContent(""); // *** END 1/2 ***
     server.client().stop(); // *** END 2/2 ***
+}
+
+void resetFPGAConfiguration() {
+    pinMode(NCONFIG, OUTPUT);
+    digitalWrite(NCONFIG, LOW);
+    delay(10);
+    digitalWrite(NCONFIG, HIGH);
+    pinMode(NCONFIG, INPUT);    
+}
+
+void reverseBitOrder(uint8_t *buffer) {
+    for (int i = 0 ; i < 256 ; i++) { 
+        buffer[i] = (buffer[i] & 0xF0) >> 4 | (buffer[i] & 0x0F) << 4;
+        buffer[i] = (buffer[i] & 0xCC) >> 2 | (buffer[i] & 0x33) << 2;
+        buffer[i] = (buffer[i] & 0xAA) >> 1 | (buffer[i] & 0x55) << 1;
+        yield(); 
+    }
 }
 
 void handleDumpFirmware() {
@@ -220,7 +266,7 @@ void handleDumpFirmware() {
     WiFiClient client = server.client();
 
     client.print("HTTP/1.1 200 OK\r\n");
-    client.print("Content-Disposition: attachment; filename=flash.raw.bin\r\n");
+    client.print("Content-Disposition: attachment; filename=flash.full.rbf\r\n");
     client.print("Content-Type: application/octet-stream\r\n");
     client.print("Content-Length: -1\r\n");
     client.print("Connection: close\r\n");
@@ -230,6 +276,7 @@ void handleDumpFirmware() {
     flash.enable();
     for (unsigned int i = 0; i < PAGES; ++i) {
         flash.page_read(i, page_buffer);
+        reverseBitOrder(page_buffer);
         client.write((const char*) page_buffer, 256);
     }
     flash.disable();
@@ -240,6 +287,10 @@ void handleDumpFirmware() {
     curl -D - -F "file=@$PWD/output_file.rbf" "http://dc-firmware-manager.local/upload-firmware?size=368011"
 */
 void handleUploadFirmware(){
+    if (!_isAuthenticated()) {
+        return;
+    }
+
     HTTPUpload& upload = server.upload();
     int totalSize = server.arg("size").toInt();
 
@@ -254,12 +305,24 @@ void handleUploadFirmware(){
     } else if (upload.status == UPLOAD_FILE_END) {
         if (fsUploadFile) {
             fsUploadFile.close();
+            writeMD5FileForFilename(FIRMWARE_FILE);
             DBG_OUTPUT_PORT.printf(">> %i/%i\n", upload.totalSize, totalSize);
             DBG_OUTPUT_PORT.printf(">> Done.\n");
         }
     }
 }
-    
+
+void writeMD5FileForFilename(const char* filename) {
+    File f = SPIFFS.open(filename, "r");
+    if (f) {
+        String md5sum = _md5sum(f);
+        char newFilename[strlen(filename) + 4];
+        sprintf(newFilename, "%s.md5", filename);
+        _writeFile(newFilename, md5sum.c_str(), md5sum.length());
+        f.close();
+    }
+}
+
 void handleDownloadFirmware() {
     HTTPClient http;
 
@@ -306,6 +369,7 @@ void handleDownloadFirmware() {
                     yield();
                 }
                 f.close();
+                writeMD5FileForFilename(FIRMWARE_FILE);
             }
 
             DBG_OUTPUT_PORT.print("\n>> [HTTP] connection closed or file end.\n");
@@ -412,20 +476,50 @@ void setupWiFi() {
     }
 }
 
+bool _isAuthenticated() {
+    return server.authenticate("Test", "testtest");
+}
+
+bool isAuthenticated() {
+    if (!_isAuthenticated()) {
+        server.requestAuthentication(DIGEST_AUTH, "Secure Zone", "Please login!\n");
+        return false;
+    }
+    return true;
+}
+
+void handleAuthenticated(void (*handler)()) {
+    if (isAuthenticated()) {
+        handler();
+    }
+}
+
 void setupHTTPServer() {
     DBG_OUTPUT_PORT.printf(">> Setting up HTTP server...\n");
 
-    server.on("/list", HTTP_GET, handleFileList);
-    server.on("/dump", HTTP_GET, handleDumpFirmware);
-    server.on("/flash", HTTP_GET, handleProgramFlash);
-    server.on("/download", HTTP_GET, handleDownloadFirmware);
-    server.on("/upload", HTTP_POST, []() { 
-        server.send(200, "text/plain", ""); 
+    server.on("/list", HTTP_GET, [](){
+        handleAuthenticated(handleFileList);
+    });
+    server.on("/dump", HTTP_GET, [](){
+        handleAuthenticated(handleDumpFirmware);
+    });
+    server.on("/flash", HTTP_GET, [](){
+        handleAuthenticated(handleProgramFlash);
+    });
+    server.on("/download", HTTP_GET, [](){
+        handleAuthenticated(handleDownloadFirmware);
+    });
+    server.on("/upload", HTTP_POST, []() {
+        if (isAuthenticated()) {
+            server.send(200, "text/plain", "");
+        }
     }, handleUploadFirmware);
         
     server.onNotFound([]() {
-        if (!handleFileRead(server.uri())) {
-            server.send(404, "text/plain", "FileNotFound");
+        if (isAuthenticated()) {
+            if (!handleFileRead(server.uri())) {
+                server.send(404, "text/plain", "FileNotFound");
+            }
         }
     });
     server.begin();
@@ -450,6 +544,8 @@ void setup(void) {
     DBG_OUTPUT_PORT.begin(115200);
     DBG_OUTPUT_PORT.printf("\n>> FirmwareManager starting...\n");
     DBG_OUTPUT_PORT.setDebugOutput(DEBUG);
+
+    pinMode(NCONFIG, INPUT);    
 
     setupSPIFFS();
     setupCredentials();

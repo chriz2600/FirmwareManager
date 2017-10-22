@@ -2,7 +2,8 @@
 
 SPIFlash::SPIFlash(int cs)
 {
-  _cs = cs;
+    _cs = cs;
+    pinMode(_cs, INPUT);
 }
 
 void SPIFlash::not_busy() {
