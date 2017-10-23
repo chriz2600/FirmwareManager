@@ -1,130 +1,19 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Firmware Manager for DreamcastHDMI</title>
-    <style type="text/css">
-        @font-face {
-            font-family: "ModeSeven";
-            src: url('mode_seven.woff') format('woff'),
-                 url('mode_seven.ttf') format('truetype');
-        }
-
-        * {
-            font-family: "ModeSeven";
-            
-        }
-        body {
-            font-size: 100%;
-        }
-
-        button {
-            font-size: 1.5em;
-        }
-
-        progress {
-            width:100%;
-            max-width:640px;
-            height:30px;
-        }
-    
-        #fileInput {
-            display:none;
-        }
-
-        div { margin-bottom: 10px; }
-    </style>
-    <script type="text/javascript">
-    
-    var client = null;
-    
-    function uploadFile()
-    {
-        //Wieder unser File Objekt
-        var file = document.getElementById("fileInput").files[0];
-        //FormData Objekt erzeugen
-        var formData = new FormData();
-        //XMLHttpRequest Objekt erzeugen
-        client = new XMLHttpRequest();
-        
-        var prog = document.getElementById("progress");
-     
-        if(!file)
-            return;
-     
-        prog.value = 0;
-        prog.max = 100;
-     
-        //Fügt dem formData Objekt unser File Objekt hinzu
-        formData.append("file", file);
-     
-        client.onerror = function(e) {
-            alert("onError");
-        };
-     
-        client.onload = function(e) {
-            document.getElementById("prozent").innerHTML = "100% Done.";
-            prog.value = prog.max;
-        };
-     
-        client.upload.onprogress = function(e) {
-            var p = Math.round(100 / e.total * e.loaded);
-            document.getElementById("progress").value = p;            
-            document.getElementById("prozent").innerHTML = p + "%";
-        };
-        
-        client.onabort = function(e) {
-            alert("Upload abgebrochen");
-        };
-     
-        client.open("POST", "/upload?size=" + file.size);
-        client.send(formData);
-    }
-    
-    function uploadAbort() {
-        if(client instanceof XMLHttpRequest)
-            //Briecht die aktuelle Übertragung ab
-            client.abort();
-    }
-
-    function chooseFile() {
-        document.getElementById("fileA").click();
-    }
-    </script>
-</head>
- 
-<body>
-<div>
-    <input type="file" name="file" id="fileInput">
-    <button id="choose-button">Choose file</button>
-</div>
-<div><button onclick="uploadFile();">Upload</button></div>
-<div>
-    <div id="fileName"></div>
-    <div id="fileSize"></div>
-    <div id="fileType"></div>
-    <progress id="progress" value="0" max="100"></progress> <span id="prozent"></span>
-</div>
-<script>
-    ! function() {
-        document.querySelector("#choose-button").addEventListener("click", function() {
-            document.querySelector("#fileInput").click();
-        });
-        document.querySelector("#fileInput").addEventListener("change", function() {
-            //File Objekt (erstes Element der FileList)
-            var file = this.files[0];
-            if (!file) {
-                return;
-            }
-
-            document.querySelector("#fileName").innerHTML = 'Filename: ' + file.name;
-            document.querySelector("#fileSize").innerHTML = 'Filesize: ' + file.size + ' Byte';
-            document.querySelector("#progress").value = 0;
-            document.querySelector("#prozent").innerHTML = "0%";
-        });
-    }();
-</script>
-</body>
+    <head>
+        <link href="static/css/main.css" rel="stylesheet">
+        <link href="static/css/jquery.terminal.css" rel="stylesheet">
+        <script src="static/js/jquery-3.1.1.min.js"></script>
+        <script src="static/js/jquery.terminal.js"></script>
+        <script src="static/js/jquery.mousewheel-min.js"></script>
+        <script src="static/js/index.js"></script>
+    </head>
+    <body>
+        <div class="tv">
+            <div id="term"></div>
+            <div class="scanlines"></div>
+        </div>
+        <script src="static/js/main.js"></script>
+        </body>
 
 </html>
