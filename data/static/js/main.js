@@ -24,7 +24,7 @@ function typed(finish_typing) {
                         finish && finish();
                     }, delay);
                 }
-                $('#term').get(0).scrollTop = $('#term').get(0).scrollHeight;
+                $('#term').scrollTop($('#term').prop('scrollHeight'));
             }, delay);
         }
     };
@@ -76,14 +76,15 @@ var term = $('#term').terminal(function(command, term) {
             (function wait() {
                 if (finish) {
                     term.echo("...");
-                    term.set_prompt('dc-hdmi> ');
                     term.find('.cursor').show();
+                    term.set_prompt('dc-hdmi> ');
+                    $('#term').scrollTop($('#term').prop('scrollHeight'));
                     waiting = false;
                 } else {
                     setTimeout(wait, 500);
                 }
             })();
-        }, 10000);
+        }, 1000);
 
     } else if (command !== '') {
         term.error('unkown command, try:');
@@ -97,11 +98,11 @@ var term = $('#term').terminal(function(command, term) {
     exit: false,
     onInit: function(term) {
         set_size();
-        typed_message(term, 'type [[b;#fff;]help] to get help', 75);
+        typed_message(term, 'type [[b;#fff;]help] to get help!', 75);
     },
     prompt: 'dc-hdmi> ',
     greetings: [
-        '     ____                                           __ ',
+        '     ____                                          __ ',
         '    / __ \\ ___ _____ ___   ______ ____ ___   ____ / /_',
         '   / / / // _// _  // _ \\ /     // __// _ \\ /  _// __/',
         '  / /_/ // / / ___// // // / / // /_ / // /_\\ \\ / /__ ',
