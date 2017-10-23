@@ -1,19 +1,26 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Firmware Manager for DreamcastHDMI</title>
     <style type="text/css">
+        @font-face {
+            font-family: "ModeSeven";
+            src: url('mode_seven.woff') format('woff'),
+                 url('mode_seven.ttf') format('truetype');
+        }
+
         * {
-            font-family: "Courier New", Courier, monospace;
+            font-family: "ModeSeven";
+            
         }
         body {
             font-size: 100%;
         }
 
         button {
-            font-size: 2em;
+            font-size: 1.5em;
         }
 
         progress {
@@ -22,65 +29,24 @@
             height:30px;
         }
     
-        #fileA {
-            position:absolute; 
-            width:0; 
-            height:0;
+        #fileInput {
+            display:none;
         }
 
-        .fileContainer {
-            overflow: hidden;
-            position: relative;
-        }
-
-        .fileContainer [type=file] {
-            cursor: inherit;
-            display: block;
-            font-size: 999px;
-            filter: alpha(opacity=0);
-            min-height: 100%;
-            min-width: 100%;
-            opacity: 0;
-            position: absolute;
-            right: 0;
-            text-align: right;
-            top: 0;
-        }
-
-        div { margin-bottom:10px; }
+        div { margin-bottom: 10px; }
     </style>
     <script type="text/javascript">
-    
-    
-    function fileChange()
-    {
-        //FileList Objekt aus dem Input Element mit der ID "fileA"
-        var fileList = document.getElementById("fileA").files;
-     
-        //File Objekt (erstes Element der FileList)
-        var file = fileList[0];
-     
-        //File Objekt nicht vorhanden = keine Datei ausgewählt oder vom Browser nicht unterstützt
-        if(!file)
-            return;
-     
-        document.getElementById("fileName").innerHTML = 'Dateiname: ' + file.name;
-        document.getElementById("fileSize").innerHTML = 'Dateigröße: ' + file.size + ' B';
-        document.getElementById("fileType").innerHTML = 'Dateitype: ' + file.type;
-        document.getElementById("progress").value = 0;
-        document.getElementById("prozent").innerHTML = "0%";
-    }
     
     var client = null;
     
     function uploadFile()
     {
         //Wieder unser File Objekt
-        var file = document.getElementById("fileA").files[0];
+        var file = document.getElementById("fileInput").files[0];
         //FormData Objekt erzeugen
         var formData = new FormData();
         //XMLHttpRequest Objekt erzeugen
-           client = new XMLHttpRequest();
+        client = new XMLHttpRequest();
         
         var prog = document.getElementById("progress");
      
@@ -91,7 +57,7 @@
         prog.max = 100;
      
         //Fügt dem formData Objekt unser File Objekt hinzu
-        formData.append("datei", file);
+        formData.append("file", file);
      
         client.onerror = function(e) {
             alert("onError");
@@ -129,21 +95,36 @@
 </head>
  
 <body>
-<form action="" method="post" enctype="multipart/form-data">
-    <div>
-        <label class="fileContainer">
-            <button>Choose file</button>
-            <input name="file" type="file" id="fileA" onchange="fileChange()"/>
-        </label>
-    </div>
-    <div><button onclick="uploadFile();">Upload</button></div>
-</form>
+<div>
+    <input type="file" name="file" id="fileInput">
+    <button id="choose-button">Choose file</button>
+</div>
+<div><button onclick="uploadFile();">Upload</button></div>
 <div>
     <div id="fileName"></div>
     <div id="fileSize"></div>
     <div id="fileType"></div>
     <progress id="progress" value="0" max="100"></progress> <span id="prozent"></span>
 </div>
+<script>
+    ! function() {
+        document.querySelector("#choose-button").addEventListener("click", function() {
+            document.querySelector("#fileInput").click();
+        });
+        document.querySelector("#fileInput").addEventListener("change", function() {
+            //File Objekt (erstes Element der FileList)
+            var file = this.files[0];
+            if (!file) {
+                return;
+            }
+
+            document.querySelector("#fileName").innerHTML = 'Filename: ' + file.name;
+            document.querySelector("#fileSize").innerHTML = 'Filesize: ' + file.size + ' Byte';
+            document.querySelector("#progress").value = 0;
+            document.querySelector("#prozent").innerHTML = "0%";
+        });
+    }();
+</script>
 </body>
 
 </html>
