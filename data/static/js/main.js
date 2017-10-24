@@ -50,6 +50,7 @@ function fileInputChange() {
 }
 
 function startTransaction(msg, action) {
+    finish = false;
     waiting = true;
     term.set_prompt('');
     term.find('.cursor').removeClass('blink');
@@ -62,15 +63,28 @@ function startTransaction(msg, action) {
     }
 }
 
-function endTransaction(msg) {
-    term.echo(msg);
-    term.find('.cursor').show();
-    term.find('.cursor').addClass('blink');
-    term.set_prompt('dc-hdmi> ');
-    $('#term').scrollTop($('#term').prop('scrollHeight'));
-    waiting = false;
+function endTransaction(msg, iserror) {
+    (function wait() {
+        if (finish) {
+            if (msg) {
+                if (iserror) {
+                    term.error(msg);
+                } else {
+                    term.echo(msg);
+                }
+            }
+            term.find('.cursor').show();
+            term.find('.cursor').addClass('blink');
+            term.set_prompt('dc-hdmi> ');
+            $('#term').scrollTop($('#term').prop('scrollHeight'));
+            waiting = false;
+        } else {
+            setTimeout(wait, 350);
+        }
+    })();
 }
 
+var progressSize = 40;
 var anim = false;
 var waiting = false;
 var finish = false;
@@ -86,15 +100,23 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction("Please select file to upload...", function() {
             $('#fileInput').click();
         });
-        setTimeout(function waitForDialog() {
-            if (finish && term.find('.cursor').hasClass('blink')) {
+        (function waitForDialog() {
+            if (term.find('.cursor').hasClass('blink')) {
                 setTimeout(function() {
                     endTransaction(fileInputChange());
                 }, 150);
             } else {
                 setTimeout(waitForDialog, 350);
             }
-        }, 500);
+        })();
+    } else if (command.match(/^\s*upload\s*$/)) {
+        startTransaction("Starting upload...", function() {
+            uploadFile();
+        });
+    } else if (command.match(/^\s*file\s*$/)) {
+        startTransaction(fileInputChange(), function() {
+            endTransaction();
+        });
     } else if (command.match(/^\s*test\s*$/)) {
         startTransaction("Test");
         /*
@@ -109,13 +131,7 @@ var term = $('#term').terminal(function(command, term) {
             })();
         });*/
         setTimeout(function() {
-            (function wait() {
-                if (finish) {
-                    endTransaction("...");
-                } else {
-                    setTimeout(wait, 500);
-                }
-            })();
+            endTransaction("...");
         }, 1000);
 
     } else if (command !== '') {
@@ -181,4 +197,59 @@ function help(full) {
     msg += "[[b;#fff;]download]: download latest flash file from dc.i74.de\n";
     msg += "[[b;#fff;]flash]:    flash uploaded file\n";
     typed_message(term, msg, 1);
+}
+
+function progress(percent, width) {
+    var size = Math.round(width*percent/100);
+    var left = '', taken = '', i;
+    for (i=size; i--;) {
+        taken += '=';
+    }
+    if (taken.length > 0) {
+        taken = taken.replace(/=$/, '>');
+    }
+    for (i=width-size; i--;) {
+        left += ' ';
+    }
+    return '[' + taken + left + '] ' + percent + '%';
+}
+
+function uploadFile()
+{
+    var file = $("#fileInput").get(0).files[0];
+    if (!file) {
+        endTransaction("No file selected!", true);
+        return;
+    }
+    var formData = new FormData();
+    var client = new XMLHttpRequest();
+
+    formData.append("file", file);
+
+    client.onerror = function(e) {
+        endTransaction("Error during upload!", true);
+    };
+ 
+    client.onload = function(e) {
+        if (client.status >= 200 && client.status < 400) {
+            endTransaction(progress(100, progressSize) + ' [[b;green;]OK]');
+        } else {
+            endTransaction('Error uploading file: ' + client.status, true);
+        }
+    };
+ 
+    client.upload.onprogress = function(e) {
+        var p = Math.round(progressSize / e.total * e.loaded);
+        term.set_prompt(progress(p, progressSize));
+    };
+    
+    client.onabort = function(e) {
+        endTransaction("Abort!", true);
+    };
+
+    var prompt = term.get_prompt();
+    term.set_prompt(progress(0, progressSize));
+
+    client.open("POST", "/upload?size=" + file.size);
+    client.send(formData);
 }
