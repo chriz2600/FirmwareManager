@@ -43,9 +43,9 @@ var typed_message = typed(function(term, message, prompt) {
 function fileInputChange() {
     var files = $("#fileInput").get(0).files;
     if (files && files[0]) {
-        return files[0].name;
+        return files[0].name + ", " + files[0].size + " Byte";
     } else {
-        return ">NONE<";
+        return { msg: "No file selected!", iserror: true };
     }
 }
 
@@ -55,9 +55,17 @@ function startTransaction(msg, action) {
     term.set_prompt('');
     term.find('.cursor').removeClass('blink');
     term.find('.cursor').hide();
-    typed_message(term, msg, 1, function() {
+    if ($.type(msg) === "object") {
+        iserror = msg.iserror;
+        msg = msg.msg || "";
+    }
+    if (msg) {
+        typed_message(term, msg, 1, function() {
+            finish = true;
+        });
+    } else {
         finish = true;
-    });
+    }
     if (typeof(action) == "function") {
         action();
     }
@@ -67,6 +75,11 @@ function endTransaction(msg, iserror) {
     (function wait() {
         if (finish) {
             if (msg) {
+                if ($.type(msg) === "object") {
+                    iserror = msg.iserror || false;
+                    msg = msg.msg || "";
+                }
+
                 if (iserror) {
                     term.error(msg);
                 } else {
@@ -114,8 +127,8 @@ var term = $('#term').terminal(function(command, term) {
             uploadFile();
         });
     } else if (command.match(/^\s*file\s*$/)) {
-        startTransaction(fileInputChange(), function() {
-            endTransaction();
+        startTransaction("", function() {
+            endTransaction(fileInputChange());
         });
     } else if (command.match(/^\s*test\s*$/)) {
         startTransaction("Test");
