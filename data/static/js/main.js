@@ -40,27 +40,63 @@ var typed_message = typed(function(term, message, prompt) {
     term.echo(message)
     term.set_prompt(prompt);
 });
+function fileInputChange() {
+    var files = $("#fileInput").get(0).files;
+    if (files && files[0]) {
+        return files[0].name;
+    } else {
+        return ">NONE<";
+    }
+}
+
+function startTransaction(msg, action) {
+    waiting = true;
+    term.set_prompt('');
+    term.find('.cursor').removeClass('blink');
+    term.find('.cursor').hide();
+    typed_message(term, msg, 1, function() {
+        finish = true;
+    });
+    if (typeof(action) == "function") {
+        action();
+    }
+}
+
+function endTransaction(msg) {
+    term.echo(msg);
+    term.find('.cursor').show();
+    term.find('.cursor').addClass('blink');
+    term.set_prompt('dc-hdmi> ');
+    $('#term').scrollTop($('#term').prop('scrollHeight'));
+    waiting = false;
+}
 
 var anim = false;
 var waiting = false;
+var finish = false;
 var scanlines = $('.scanlines');
 var tv = $('.tv');
 var term = $('#term').terminal(function(command, term) {
-    var finish = false;
-
     if (command.match(/^\s*exit\s*$/)) {
         $('.tv').addClass('collapse');
         term.disable();
     } else if (command.match(/^\s*help\s*$/)) {
         help(true);
-    } else if (command.match(/^\s*test\s*$/)) {
-        waiting = true;
-        var msg = "Please select file to upload...";
-        term.set_prompt('');
-        term.find('.cursor').hide();
-        typed_message(term, msg, 1, function() {
-            finish = true;
+    } else if (command.match(/^\s*select\s*$/)) {
+        startTransaction("Please select file to upload...", function() {
+            $('#fileInput').click();
         });
+        setTimeout(function waitForDialog() {
+            if (finish && term.find('.cursor').hasClass('blink')) {
+                setTimeout(function() {
+                    endTransaction(fileInputChange());
+                }, 150);
+            } else {
+                setTimeout(waitForDialog, 350);
+            }
+        }, 500);
+    } else if (command.match(/^\s*test\s*$/)) {
+        startTransaction("Test");
         /*
         var args = {command: cmd};
         $.get('...', args, function(result) {
@@ -75,11 +111,7 @@ var term = $('#term').terminal(function(command, term) {
         setTimeout(function() {
             (function wait() {
                 if (finish) {
-                    term.echo("...");
-                    term.find('.cursor').show();
-                    term.set_prompt('dc-hdmi> ');
-                    $('#term').scrollTop($('#term').prop('scrollHeight'));
-                    waiting = false;
+                    endTransaction("...");
                 } else {
                     setTimeout(wait, 500);
                 }

@@ -204,3 +204,6 @@ to { transform: translate(0, 100vh)}
         opacity: 0;
     }  
 }        
+#fileInput {
+    display:none;
+}
