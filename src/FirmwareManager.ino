@@ -28,8 +28,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define CS 16
 #define NCONFIG 5
 #define DBG_OUTPUT_PORT Serial
-#define FIRMWARE_FILE "/firmware.rdf"
-#define FIRMWARE_URL "http://dc.i74.de/flash.rbf"
+#define FIRMWARE_FILE "/firmware.rbf"
+#define FIRMWARE_URL "http://dc.i74.de/firmware.rbf"
 
 #define PAGES 8192 // 8192 pages x 256 bytes = 2MB = 16MBit
 #define DEBUG true
@@ -291,7 +291,7 @@ void handleUploadFirmware() {
 }
 
 void handleUploadIndexHtml() {
-    handleUpload("/index.html");
+    handleUpload("/index.html.gz");
 }    
 
 void handleUpload(const char* filename) {
@@ -332,11 +332,29 @@ void writeMD5FileForFilename(const char* filename) {
 }
 
 void handleDownloadFirmware() {
-    HTTPClient http;
-
-    DBG_OUTPUT_PORT.printf(">> [HTTP] begin...\n");
-    http.begin(firmwareUrl);
+    WiFiClient client = server.client();
     
+    client.print("HTTP/1.1 200 OK\r\n");
+    client.print("Content-Type: text/plain\r\n");
+    client.print("Content-Length: -1\r\n");
+    client.print("Connection: close\r\n");
+    client.print("Access-Control-Allow-Origin: *\r\n");
+    client.print("\r\n");
+    
+    downloadFile(
+        String(String(firmwareUrl) + ".md5").c_str(), 
+        String(String(FIRMWARE_FILE) + ".orig.md5").c_str()
+    );
+    String msg = downloadFile(firmwareUrl, FIRMWARE_FILE);
+
+    client.stop();
+}
+
+String downloadFile(const char* source, const char* target) {
+    HTTPClient http;
+    String returnValue;
+    DBG_OUTPUT_PORT.printf(">> [HTTP] begin...\n");
+    http.begin(source);
     DBG_OUTPUT_PORT.printf(">> [HTTP] GET...\n");
     int httpCode = http.GET();
     if (httpCode > 0) {
@@ -346,7 +364,7 @@ void handleDownloadFirmware() {
             // get lenght of document (is -1 when Server sends no Content-Length header)
             int len = http.getSize();
             
-            File f = SPIFFS.open(FIRMWARE_FILE, "w");
+            File f = SPIFFS.open(target, "w");
             if (f) {
                 // create buffer for read
                 uint8_t buff[256] = { 0 };
@@ -368,8 +386,7 @@ void handleDownloadFirmware() {
 
                         // write it to Serial
                         DBG_OUTPUT_PORT.printf("Got: %i/%i, %i\n", c, len, bytes2read);
-                        //server.sendContent(String(len) + "\n");
-                        
+
                         if(len > 0) {
                             len -= c;
                         }
@@ -377,24 +394,25 @@ void handleDownloadFirmware() {
                     yield();
                 }
                 f.close();
-                writeMD5FileForFilename(FIRMWARE_FILE);
+                writeMD5FileForFilename(target);
             }
 
             DBG_OUTPUT_PORT.print("\n>> [HTTP] connection closed or file end.\n");
             if (len == 0) {
-                server.send(200, "text/plain", "OK: firmware downloaded.\n");
+                returnValue = String("OK: file downloaded.");
             } else {
-                server.send(200, "text/plain", "WARNING: firmware downloaded, but length unchecked.\n");
+                returnValue = String("WARNING: file downloaded, but length unchecked.");
             }
         } else {
-            server.send(200, "text/plain", "ERROR: firmware NOT downloaded.\n");
+            returnValue = String("ERROR: file NOT downloaded.");
         }
     } else {
         DBG_OUTPUT_PORT.printf(">> [HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
-        server.send(200, "text/plain", "ERROR: connect failed\n");
+        returnValue = String("ERROR: connect failed.");
     }
 
     http.end();
+    return returnValue;
 }
 
 void setupArduinoOTA() {

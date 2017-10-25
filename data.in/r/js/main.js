@@ -43,9 +43,20 @@ var typed_message = typed(function(term, message, prompt) {
 function fileInputChange() {
     var files = $("#fileInput").get(0).files;
     if (files && files[0]) {
-        return files[0].name + ", " + files[0].size + " Byte";
+        var reader = new FileReader();
+        reader.onload = function(event) {
+            var spark = new SparkMD5.ArrayBuffer();
+            var md5 = spark.append(event.target.result);
+            lastMD5 = spark.end();
+            endTransaction("Selected file:\n"
+                + "Name: " + files[0].name + "\n" 
+                + "Size: " + files[0].size + " Byte\n"
+                + "MD5:  [[b;#fff;]" + lastMD5 + "]"
+            );
+        };
+        reader.readAsArrayBuffer(files[0]);
     } else {
-        return { msg: "No file selected!", iserror: true };
+        endTransaction({ msg: "No file selected!", iserror: true });
     }
 }
 
@@ -97,6 +108,7 @@ function endTransaction(msg, iserror) {
     })();
 }
 
+var lastMD5;
 var progressSize = 40;
 var anim = false;
 var waiting = false;
@@ -116,19 +128,23 @@ var term = $('#term').terminal(function(command, term) {
         (function waitForDialog() {
             if (term.find('.cursor').hasClass('blink')) {
                 setTimeout(function() {
-                    endTransaction(fileInputChange());
+                    fileInputChange();
                 }, 150);
             } else {
                 setTimeout(waitForDialog, 350);
             }
         })();
     } else if (command.match(/^\s*upload\s*$/)) {
-        startTransaction("Starting upload...", function() {
+        startTransaction(null, function() {
             uploadFile();
         });
+    } else if (command.match(/^\s*download\s*$/)) {
+        startTransaction(null, function() {
+            downloadFile();
+        });
     } else if (command.match(/^\s*file\s*$/)) {
-        startTransaction("", function() {
-            endTransaction(fileInputChange());
+        startTransaction(null, function() {
+            fileInputChange();
         });
     } else if (command.match(/^\s*test\s*$/)) {
         startTransaction("Test");
@@ -159,16 +175,19 @@ var term = $('#term').terminal(function(command, term) {
     exit: false,
     onInit: function(term) {
         set_size();
-        typed_message(term, 'type [[b;#fff;]help] to get help!', 75);
+        typed_message(term, 'Type [[b;#fff;]help] to get help!\n', 36);
     },
     prompt: 'dc-hdmi> ',
     greetings: [
-        '     ____                                          __ ',
-        '    / __ \\ ___ _____ ___   ______ ____ ___   ____ / /_',
-        '   / / / // _// _  // _ \\ /     // __// _ \\ /  _// __/',
-        '  / /_/ // / / ___// // // / / // /_ / // /_\\ \\ / /__ ',
-        ' /_____//_/ /____/ \\__\\_/_/ /_//___/ \\__\\_/____/\\___/',
-        '                                   HDMI by chriz2600',
+        '    ____                                          __ ',
+        '   / __ \\ ___ _____ ___   ______ ____ ___   ____ / /_',
+        '  / / / // _// _  // _ \\ /     // __// _ \\ /  _// __/',
+        ' / /_/ // / / ___// // // / / // /_ / // /_\\ \\ / /__ ',
+        '/_____//_/ /____/ \\__\\_/_/ /_//___/ \\__\\_/____/\\___/',
+        '                              __  __ __   ______ __',
+        '                             / /_/ //  \\ /     // /',
+        '       by chriz2600         / __  // / // / / // /',
+        '                           /_/ /_//___//_/ /_//_/',
         ''
     ].join('\n'),
     keydown: function(e) {
@@ -218,7 +237,7 @@ function progress(percent, width) {
     for (i=size; i--;) {
         taken += '=';
     }
-    if (taken.length > 0) {
+    if (taken.length > 0 && percent < 100) {
         taken = taken.replace(/=$/, '>');
     }
     for (i=width-size; i--;) {
@@ -227,8 +246,7 @@ function progress(percent, width) {
     return '[' + taken + left + '] ' + percent + '%';
 }
 
-function uploadFile()
-{
+function uploadFile() {
     var file = $("#fileInput").get(0).files[0];
     if (!file) {
         endTransaction("No file selected!", true);
@@ -245,24 +263,81 @@ function uploadFile()
  
     client.onload = function(e) {
         if (client.status >= 200 && client.status < 400) {
-            endTransaction(progress(100, progressSize) + ' [[b;green;]OK]');
+            $.ajax("/firmware.rbf.md5").done(function (data) {
+                endTransaction(
+                    progress(100, progressSize) + ' [[b;green;]OK]\n'
+                    + "MD5 Check: " 
+                    + (lastMD5 == data 
+                       ? "[[b;green;]OK]" 
+                       : "[[b;red;]MD5 mismatch: " + data + "]")
+                    + (lastMD5 == data ? "" : "\nPlease try to re-upload file.")
+                );
+            }).fail(function() {
+                endTransaction('Error reading checksum', true);    
+            });
         } else {
             endTransaction('Error uploading file: ' + client.status, true);
         }
     };
  
     client.upload.onprogress = function(e) {
-        var p = Math.round(progressSize / e.total * e.loaded);
-        term.set_prompt(progress(p, progressSize));
+        var p = Math.round(100 / e.total * e.loaded);
+        term.set_prompt(progress(p - 1, progressSize));
     };
     
     client.onabort = function(e) {
         endTransaction("Abort!", true);
     };
 
-    var prompt = term.get_prompt();
     term.set_prompt(progress(0, progressSize));
 
     client.open("POST", "/upload?size=" + file.size);
     client.send(formData);
+}
+
+function downloadFile() {
+    startSpinner(term, spinners["shark"]);
+
+    $.ajax("/download").done(function (data) {
+        $.ajax("/firmware.rbf.md5").done(function (data) {
+            var calcMd5 = $.trim(data);
+            $.ajax("/firmware.rbf.orig.md5").done(function (data) {
+                var origMd5 = $.trim(data);
+                endTransaction(
+                    'Download: [[b;green;]OK]\n'
+                    + "MD5 Check: " 
+                    + (calcMd5 == origMd5 
+                        ? "[[b;green;]OK]" 
+                        : "[[b;red;]MD5 mismatch: " + data + "]")
+                    + (calcMd5 == origMd5 ? "" : "\nPlease try to re-download file.")
+                );
+            }).fail(function() {
+                endTransaction('Error reading original checksum', true);    
+            });
+        }).fail(function() {
+            endTransaction('Error reading checksum', true);    
+        });
+    }).fail(function() {
+        endTransaction("Error during download!", true);
+    }).always(function() {
+        stopSpinner();
+    });
+}
+
+var i;
+var timer;
+var prompt;
+var spinner;
+function startSpinner(term, spinner) {
+    i = 0;
+    function set() {
+        var text = spinner.frames[i++ % spinner.frames.length];
+        term.set_prompt(text);
+    };
+    prompt = term.get_prompt();
+    set();
+    timer = setInterval(set, spinner.interval);
+}
+function stopSpinner() {
+    clearInterval(timer);
 }

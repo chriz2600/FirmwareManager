@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# npm install -g inliner
+
+cd $(dirname $0)/..
+
+inliner -m data.in/index.html > data/index.html
+gzip -f -9 data/index.html

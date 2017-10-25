@@ -1,0 +1,7 @@
+#!/bin/bash
+
+cd $(dirname $0)/..
+
+curl --basic --user Test:testtest \
+     -o /dev/null -F "file=@$PWD/data/index.html.gz" \
+     "http://dc-firmware-manager.local/upload-index"
