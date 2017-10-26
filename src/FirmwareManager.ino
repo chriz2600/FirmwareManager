@@ -17,10 +17,13 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
-#include <ESP8266WebServer.h>
-#include <ESP8266HTTPClient.h>
 #include <ESP8266mDNS.h>
 #include <FS.h>
+#include <Hash.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+//#include <ESP8266WebServer.h>
+//#include <ESP8266HTTPClient.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <SPIFlash.h>
@@ -29,6 +32,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define NCONFIG 5
 #define DBG_OUTPUT_PORT Serial
 #define FIRMWARE_FILE "/firmware.rbf"
+#define FIRMWARE_FILE_ORIG "/firmware.orig.rbf"
 #define FIRMWARE_URL "http://dc.i74.de/firmware.rbf"
 
 #define PAGES 8192 // 8192 pages x 256 bytes = 2MB = 16MBit
@@ -42,14 +46,19 @@ const char* host = "dc-firmware-manager";
 const char* WiFiAPPSK = "geheim1234";
 IPAddress ipAddress( 192, 168, 4, 1 );
 bool inInitialSetupMode = false;
+String fname;
 
 const uint8_t empty_buffer[256] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
-ESP8266WebServer server(80);
+//ESP8266WebServer server(80);
+AsyncWebServer server(80);
 SPIFlash flash(CS);
-//holds the current upload
-File fsUploadFile;
 
+static AsyncClient *aClient = NULL;
+File downloadFile;
+MD5Builder md5;
+
+/*
 String getContentType(String filename){
     if(server.hasArg("download")) return "application/octet-stream";
     else if(filename.endsWith(".htm")) return "text/html";
@@ -65,8 +74,9 @@ String getContentType(String filename){
     else if(filename.endsWith(".zip")) return "application/x-zip";
     else if(filename.endsWith(".gz")) return "application/x-gzip";
     return "text/plain";
-}
+}*/
 
+/*
 bool handleFileRead(String path){
     if (path.endsWith("/")) {
         path += "index.html";
@@ -84,7 +94,7 @@ bool handleFileRead(String path){
     }
     return false;
 }
-
+*/
 void _writeFile(const char *filename, const char *towrite, unsigned int len) {
     File f = SPIFFS.open(filename, "w");
     if (f) {
@@ -147,7 +157,7 @@ void setupAPMode(void) {
     DBG_OUTPUT_PORT.printf(">> AP-PSK: %s\n", WiFiAPPSK);
     inInitialSetupMode = true;
 }
-
+/*
 bool copyBlockwise(String source, String destination, unsigned int length) {
     unsigned int i = 0;
     uint8_t buff[256];
@@ -167,14 +177,14 @@ bool copyBlockwise(String source, String destination, unsigned int length) {
         src.close();
     }
 }
-
+*/
 void initBuffer(uint8_t *buffer) {
     for (int i = 0 ; i < 256 ; i++) { 
         buffer[i] = 0xff; 
         yield(); 
     }
 }
-
+/*
 void handleFileList() {
     if (!server.hasArg("dir")) {
         server.send(500, "text/plain", "BAD ARGS"); 
@@ -204,7 +214,8 @@ void handleFileList() {
     output += "]";
     server.send(200, "text/json", output);
 }
-
+*/
+/*
 void handleProgramFlash() {
     unsigned int page = 0;
     uint8_t buffer[256];
@@ -242,7 +253,7 @@ void handleProgramFlash() {
     server.sendContent(""); // *** END 1/2 ***
     server.client().stop(); // *** END 2/2 ***
 }
-
+*/
 void resetFPGAConfiguration() {
     pinMode(NCONFIG, OUTPUT);
     digitalWrite(NCONFIG, LOW);
@@ -259,7 +270,7 @@ void reverseBitOrder(uint8_t *buffer) {
         yield(); 
     }
 }
-
+/*
 void handleDumpFirmware() {
     uint8_t page_buffer[256];
     unsigned int last_page = 0;
@@ -282,10 +293,147 @@ void handleDumpFirmware() {
     flash.disable();
     client.stop();
 }
-
+*/
 /*
     curl -D - -F "file=@$PWD/output_file.rbf" "http://dc-firmware-manager.local/upload-firmware?size=368011"
+void handleUploadFirmware(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+    //Handle upload
+    handleUpload(request, FIRMWARE_FILE, index, data, len, final);
+}
+
+void handleUploadIndexHtml(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+    //Handle upload
+    handleUpload(request, "/index.html.gz", index, data, len, final);
+}
 */
+bool _isAuthenticated(AsyncWebServerRequest *request) {
+    return request->authenticate("Test", "testtest");
+}
+
+void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+    if(!_isAuthenticated(request)) {
+        return;
+    }
+    if (!index) {
+        // normalize filename
+        if (filename == "index.html.gz") filename = String("/index.html.gz");
+        else filename = String(FIRMWARE_FILE);
+        
+        fname = filename.c_str();
+        md5.begin();
+        request->_tempFile = SPIFFS.open(filename, "w");
+        DBG_OUTPUT_PORT.printf(">> Receiving %s\n", filename.c_str());
+    }
+    if (request->_tempFile) {
+        if (len) {
+            request->_tempFile.write(data, len);
+            md5.add(data, len);
+        }
+        if (final) {
+            DBG_OUTPUT_PORT.printf(">> MD5 calc for %s\n", fname.c_str());
+            request->_tempFile.close();
+            md5.calculate();
+            String md5sum = md5.toString();
+            _writeFile((fname + ".md5").c_str(), md5sum.c_str(), md5sum.length());
+        }
+    }
+}
+
+bool headerFound;
+String header;
+
+void handleDownload(AsyncWebServerRequest *request) {
+    header = String();
+    headerFound = false;
+    md5.begin();
+    downloadFile = SPIFFS.open(FIRMWARE_FILE_ORIG, "w");
+
+    if (downloadFile) {
+        aClient = new AsyncClient();
+
+        aClient->onError([](void *arg, AsyncClient *client, int error) {
+            DBG_OUTPUT_PORT.println("Connect Error");
+            aClient = NULL;
+            delete client;
+        }, NULL);
+    
+        aClient->onConnect([](void *arg, AsyncClient *client) {
+            Serial.println("Connected");
+            aClient->onError(NULL, NULL);
+
+            client->onDisconnect([](void *arg, AsyncClient *c) {
+                downloadFile.close();
+                md5.calculate();
+                String md5sum = md5.toString();
+                _writeFile((String(FIRMWARE_FILE_ORIG) + ".md5").c_str(), md5sum.c_str(), md5sum.length());
+                Serial.println("Disconnected");
+                aClient = NULL;
+                delete c;
+            }, NULL);
+        
+            client->onData([](void *arg, AsyncClient *c, void *data, size_t len) {
+                DBG_OUTPUT_PORT.printf("Data 1: %i\n", len);
+                uint8_t* d = (uint8_t*) data;
+
+                if (!headerFound) {
+                    String sData = String((char*) data);
+                    int idx = sData.indexOf("\r\n\r\n");
+                    if (idx == -1) {
+                        header += sData;
+                        return;
+                    } else {
+                        header += sData.substring(0, idx + 4);
+                        d = (uint8_t*) sData.substring(idx + 4).c_str();
+                        len = (len - (idx + 4));
+                        headerFound = true;
+                    }
+                }
+
+                DBG_OUTPUT_PORT.printf("Data 2: %i\n", len);
+                downloadFile.write(d, len);
+                md5.add(d, len);
+            }, NULL);
+        
+            //send the request
+            client->write("GET /firmware.rbf HTTP/1.0\r\nHost: dc.i74.de\r\n\r\n");
+            // Content-Length: 368011
+        }, NULL);
+
+        DBG_OUTPUT_PORT.println("Trying to connect");
+        if(!aClient->connect("dc.i74.de", 80)) {
+            DBG_OUTPUT_PORT.println("Connect Fail");
+            AsyncClient *client = aClient;
+            aClient = NULL;
+            delete client;
+        }
+
+        AsyncWebServerResponse *response = request->beginChunkedResponse(
+            "text/plain", [](uint8_t *buffer, size_t maxLen, size_t index) -> size_t 
+        {
+            char msg[64];
+            int len;
+            //Write up to "maxLen" bytes into "buffer" and return the amount written.
+            //index equals the amount of bytes that have been already sent
+            //You will be asked for more data until 0 is returned
+            //Keep in mind that you can not delay or yield waiting for more data!
+            if (!aClient) {
+                return 0;
+            }
+
+            DBG_OUTPUT_PORT.println("HERE");
+            sprintf(msg, "...\n");
+            len = strlen(msg);
+            memcpy(buffer, msg, (len > maxLen ? maxLen : len));
+            return len;
+          });
+          response->addHeader("Server", "ESP Async Web Server");
+          request->send(response);
+    } else {
+        request->send(500);
+    }
+}
+
+/*
 void handleUploadFirmware() {
     handleUpload(FIRMWARE_FILE);
 }
@@ -319,7 +467,7 @@ void handleUpload(const char* filename) {
         }
     }
 }
-
+*/
 void writeMD5FileForFilename(const char* filename) {
     File f = SPIFFS.open(filename, "r");
     if (f) {
@@ -330,7 +478,7 @@ void writeMD5FileForFilename(const char* filename) {
         f.close();
     }
 }
-
+/*
 void handleDownloadFirmware() {
     WiFiClient client = server.client();
     
@@ -349,7 +497,8 @@ void handleDownloadFirmware() {
 
     client.stop();
 }
-
+*/
+/*
 String downloadFile(const char* source, const char* target) {
     HTTPClient http;
     String returnValue;
@@ -414,7 +563,7 @@ String downloadFile(const char* source, const char* target) {
     http.end();
     return returnValue;
 }
-
+*/
 void setupArduinoOTA() {
     DBG_OUTPUT_PORT.printf(">> Setting up ArduinoOTA...\n");
     
@@ -501,28 +650,50 @@ void setupWiFi() {
         );
     }
 }
-
-bool _isAuthenticated() {
-    return server.authenticate("Test", "testtest");
-}
-
+/*
+*/
+/*
 bool isAuthenticated() {
     if (!_isAuthenticated()) {
-        server.requestAuthentication(BASIC_AUTH/*DIGEST_AUTH*/, "Secure Zone", "Please login!\n");
+        server.requestAuthentication(BASIC_AUTH, "Secure Zone", "Please login!\n");
         return false;
     }
     return true;
-}
-
+}*/
+/*
 void handleAuthenticated(void (*handler)()) {
     if (isAuthenticated()) {
         handler();
     }
 }
+*/
 
 void setupHTTPServer() {
     DBG_OUTPUT_PORT.printf(">> Setting up HTTP server...\n");
 
+    server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        request->send(200);
+    }, handleUpload);
+
+    server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request){
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        handleDownload(request);
+    });
+
+    AsyncStaticWebHandler* handler = &server
+        .serveStatic("/", SPIFFS, "/")
+        .setDefaultFile("index.html");
+    // set authentication by configured user/pass later
+    handler->setAuthentication("Test", "testtest");
+
+/*
+  */  
+        /*
     server.on("/list", HTTP_GET, [](){
         handleAuthenticated(handleFileList);
     });
@@ -553,6 +724,7 @@ void setupHTTPServer() {
             }
         }
     });
+    */
     server.begin();
 }
 
@@ -593,6 +765,5 @@ void setup(void) {
 }
 
 void loop(void){
-    server.handleClient();
     ArduinoOTA.handle();
 }
