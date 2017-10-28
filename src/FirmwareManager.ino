@@ -70,19 +70,6 @@ void _readFile(const char *filename, char *target, unsigned int len) {
     }
 }
 
-String _md5sum(File f) {
-    if (f && f.seek(0, SeekSet)) {
-        MD5Builder md5;
-        md5.begin();
-        md5.addStream(f, f.size());
-        md5.calculate();
-        // rewind back to start
-        f.seek(0, SeekSet);
-        return md5.toString();
-    }
-    return String();
-}
-
 void setupCredentials(void) {
     DBG_OUTPUT_PORT.printf(">> Reading stored values...\n");
     _readFile("/etc/ssid", ssid, 64);
@@ -304,17 +291,6 @@ void handleDownload(AsyncWebServerRequest *request) {
         request->send(200);
     } else {
         request->send(500);
-    }
-}
-
-void writeMD5FileForFilename(const char* filename) {
-    File f = SPIFFS.open(filename, "r");
-    if (f) {
-        String md5sum = _md5sum(f);
-        char newFilename[strlen(filename) + 4];
-        sprintf(newFilename, "%s.md5", filename);
-        _writeFile(newFilename, md5sum.c_str(), md5sum.length());
-        f.close();
     }
 }
 
