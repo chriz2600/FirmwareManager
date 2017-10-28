@@ -176,6 +176,18 @@ var term = $('#term').terminal(function(command, term) {
         set_size();
         typed_message(term, 'Type [[b;#fff;]help] to get help!\n', 36);
     },
+    completion: [
+        "help",
+        "get",
+        "check",
+        "select",
+        "upload",
+        "download",
+        "flash",
+        "reset",
+        "file",
+        "exit"
+    ],
     prompt: 'dc-hdmi> ',
     greetings: [
         '    ____                                          __ ',
