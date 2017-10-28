@@ -160,7 +160,7 @@ var term = $('#term').terminal(function(command, term) {
         });
     } else if (command.match(/^\s*check\s*$/)) {
         startTransaction(null, function() {
-            checkFirmware();
+            getFirmwareData(true);
         });
     } else if (command !== '') {
         term.error('unkown command, try:');
@@ -190,15 +190,15 @@ var term = $('#term').terminal(function(command, term) {
     ],
     prompt: 'dc-hdmi> ',
     greetings: [
-        '    ____                                          __ ',
-        '   / __ \\ ___ _____ ___   ______ ____ ___   ____ / /_',
-        '  / / / // _// _  // _ \\ /     // __// _ \\ /  _// __/',
-        ' / /_/ // / / ___// // // / / // /_ / // /_\\ \\ / /__ ',
-        '/_____//_/ /____/ \\__\\_/_/ /_//___/ \\__\\_/____/\\___/',
-        '                              __  __ __   ______ __',
-        '                             / __/ //  \\ /     // /',
-        '       by chriz2600         / __  // / // / / // /',
-        '                           /_/ /_//___//_/ /_//_/',
+        '       __                                        __ ',
+        '   ___/ /___ _____ ___   ______ ____ ___   ____ / /_',
+        '  / _  // _// _  // _ \\ /     // __// _ \\ /  _// __/',
+        ' / // // / / ___// // // / / // /_ / // /_\\ \\ / /__ ',
+        ' \\___//_/ /____/ \\__\\_/_/ /_//___/ \\__\\_/___/ \\___/',
+        '                            __  __ __   ______ __',
+        '                           / __/ //  \\ /     // /',
+        '      by chriz2600        / __  // / // / / // /',
+        '                         /_/ /_//___//_/ /_//_/',
         ''
     ].join('\n'),
     keydown: function(e) {
@@ -311,19 +311,28 @@ function getFirmwareData() {
         var lastFlashMd5 = $.trim(data);
         $.ajax("/firmware.rbf.md5").done(function (data) {
             var stagedMd5 = $.trim(data);
-            endTransaction(
-                  'Installed firmware:\n'
-                + ' MD5: [[b;#fff;]' + lastFlashMd5 + ']\n'
-                + 'Staged firmware:\n'
-                + ' MD5: [[b;#fff;]' + stagedMd5 + ']'
-            );
+            $.ajax("http://dc.i74.de/firmware.rbf.md5").done(function (data) {
+                var origMd5 = $.trim(data);
+                endTransaction(
+                    'Installed firmware:\n'
+                  + ' MD5: [[b;#fff;]' + lastFlashMd5 + ']\n'
+                  + 'Staged firmware:\n'
+                  + ' MD5: [[b;#fff;]' + stagedMd5 + ']\n'
+                  + 'Official firmware:\n'
+                  + ' MD5: [[b;#fff;]' + origMd5 + ']\n'
+                  + '\n'
+                  + ((lastFlashMd5 == origMd5) 
+                    ? 'Currently installed firmware is already the latest version.'
+                    : 'New firmware available.')
+                );
+            }).fail(function() {
+                endTransaction('Error reading original checksum', true);
+            });
         }).fail(function() {
-            endTransaction("Error resetting fpga!", true);
+            endTransaction("Error reading checksum!", true);
         });
-
-        
     }).fail(function() {
-        endTransaction("Error resetting fpga!", true);
+        endTransaction("Error reading checksum!", true);
     });
 
 }
