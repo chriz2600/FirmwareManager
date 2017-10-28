@@ -1,19 +1,5 @@
 /* 
-FSWebServer - Example WebServer with SPIFFS backend for esp8266
-Copyright (c) 2015 Hristo Gochkov. All rights reserved.
-This file is part of the ESP8266WebServer library for Arduino environment.
-
-This library is free software; you can redistribute it and/or
-modify it under the terms of the GNU Lesser General Public
-License as published by the Free Software Foundation; either
-version 2.1 of the License, or (at your option) any later version.
-This library is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-Lesser General Public License for more details.
-You should have received a copy of the GNU Lesser General Public
-License along with this library; if not, write to the Free Software
-Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+    Dreamcast Firmware Manager
 */
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
@@ -22,8 +8,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <Hash.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-//#include <ESP8266WebServer.h>
-//#include <ESP8266HTTPClient.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <SPIFlash.h>
@@ -32,7 +16,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define NCONFIG 5
 #define DBG_OUTPUT_PORT Serial
 #define FIRMWARE_FILE "/firmware.rbf"
-//#define FIRMWARE_FILE_ORIG "/firmware.orig.rbf"
 #define FIRMWARE_URL "http://dc.i74.de/firmware.rbf"
 
 #define PAGES 8192 // 8192 pages x 256 bytes = 2MB = 16MBit
@@ -50,7 +33,6 @@ String fname;
 
 const uint8_t empty_buffer[256] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
-//ESP8266WebServer server(80);
 AsyncWebServer server(80);
 SPIFlash flash(CS);
 MD5Builder md5;
@@ -64,49 +46,9 @@ bool headerFound = false;
 String header = String();
 int totalLength = -1;
 int readLength = -1;
-//uint8_t buffer[256];
 unsigned int page = 0;
 bool finished = false;
 
-
-
-/*
-String getContentType(String filename){
-    if(server.hasArg("download")) return "application/octet-stream";
-    else if(filename.endsWith(".htm")) return "text/html";
-    else if(filename.endsWith(".html")) return "text/html";
-    else if(filename.endsWith(".css")) return "text/css";
-    else if(filename.endsWith(".js")) return "application/javascript";
-    else if(filename.endsWith(".png")) return "image/png";
-    else if(filename.endsWith(".gif")) return "image/gif";
-    else if(filename.endsWith(".jpg")) return "image/jpeg";
-    else if(filename.endsWith(".ico")) return "image/x-icon";
-    else if(filename.endsWith(".xml")) return "text/xml";
-    else if(filename.endsWith(".pdf")) return "application/x-pdf";
-    else if(filename.endsWith(".zip")) return "application/x-zip";
-    else if(filename.endsWith(".gz")) return "application/x-gzip";
-    return "text/plain";
-}*/
-
-/*
-bool handleFileRead(String path){
-    if (path.endsWith("/")) {
-        path += "index.html";
-    }
-    String contentType = getContentType(path);
-    String pathWithGz = path + ".gz";
-    if (SPIFFS.exists(pathWithGz) || SPIFFS.exists(path)) {
-        if (SPIFFS.exists(pathWithGz)) {
-            path += ".gz";
-        }
-        File file = SPIFFS.open(path, "r");
-        size_t sent = server.streamFile(file, contentType);
-        file.close();
-        return true;
-    }
-    return false;
-}
-*/
 void _writeFile(const char *filename, const char *towrite, unsigned int len) {
     File f = SPIFFS.open(filename, "w");
     if (f) {
@@ -169,63 +111,13 @@ void setupAPMode(void) {
     DBG_OUTPUT_PORT.printf(">> AP-PSK: %s\n", WiFiAPPSK);
     inInitialSetupMode = true;
 }
-/*
-bool copyBlockwise(String source, String destination, unsigned int length) {
-    unsigned int i = 0;
-    uint8_t buff[256];
-    File src = SPIFFS.open(source, "r");
-    if (src) {
-        File dest = SPIFFS.open(destination, "w");
-        if (dest) {
-            server.sendContent("shorten file:\n");
-            while (i <= length) {
-                server.sendContent(String(i) + "\n");
-                src.readBytes((char *) buff, 256);
-                dest.write(buff, 256);
-                i++;
-            }
-            dest.close();
-        }
-        src.close();
-    }
-}
-*/
+
 void initBuffer(uint8_t *buffer) {
     for (int i = 0 ; i < 256 ; i++) { 
         buffer[i] = 0xff; 
     }
 }
-/*
-void handleFileList() {
-    if (!server.hasArg("dir")) {
-        server.send(500, "text/plain", "BAD ARGS"); 
-        return;
-    }
-    
-    String path = server.arg("dir");
-    DBG_OUTPUT_PORT.println(">> handleFileList: " + path);
-    Dir dir = SPIFFS.openDir(path);
-    path = String();
-    
-    String output = "[";
-    while(dir.next()){
-        File entry = dir.openFile("r");
-        if (output != "[") output += ',';
-        bool isDir = false;
-        output += "{\"type\":\"";
-        output += (isDir)?"dir":"file";
-        output += "\",\"name\":\"";
-        output += String(entry.name()).substring(1);
-        output += "\",\"length\":\"";
-        output += String(entry.size());
-        output += "\"}";
-        entry.close();
-    }
-    
-    output += "]";
-    server.send(200, "text/json", output);
-}
-*/
+
 void resetFPGAConfiguration() {
     pinMode(NCONFIG, OUTPUT);
     digitalWrite(NCONFIG, LOW);
@@ -241,42 +133,7 @@ void reverseBitOrder(uint8_t *buffer) {
         buffer[i] = (buffer[i] & 0xAA) >> 1 | (buffer[i] & 0x55) << 1;
     }
 }
-/*
-void handleDumpFirmware() {
-    uint8_t page_buffer[256];
-    unsigned int last_page = 0;
-    WiFiClient client = server.client();
 
-    client.print("HTTP/1.1 200 OK\r\n");
-    client.print("Content-Disposition: attachment; filename=flash.full.rbf\r\n");
-    client.print("Content-Type: application/octet-stream\r\n");
-    client.print("Content-Length: -1\r\n");
-    client.print("Connection: close\r\n");
-    client.print("Access-Control-Allow-Origin: *\r\n");
-    client.print("\r\n");
-
-    flash.enable();
-    for (unsigned int i = 0; i < PAGES; ++i) {
-        flash.page_read(i, page_buffer);
-        reverseBitOrder(page_buffer);
-        client.write((const char*) page_buffer, 256);
-    }
-    flash.disable();
-    client.stop();
-}
-*/
-/*
-    curl -D - -F "file=@$PWD/output_file.rbf" "http://dc-firmware-manager.local/upload-firmware?size=368011"
-void handleUploadFirmware(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
-    //Handle upload
-    handleUpload(request, FIRMWARE_FILE, index, data, len, final);
-}
-
-void handleUploadIndexHtml(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
-    //Handle upload
-    handleUpload(request, "/index.html.gz", index, data, len, final);
-}
-*/
 bool _isAuthenticated(AsyncWebServerRequest *request) {
     return request->authenticate("Test", "testtest");
 }
@@ -316,45 +173,6 @@ int writeProgress(uint8_t *buffer, size_t maxLen, int read, int total) {
     return len;
 }
 
-/*
-void handleProgramFlash() {
-    unsigned int page = 0;
-    uint8_t buffer[256];
-    // initialze
-    initBuffer(buffer);
-    
-    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    server.sendHeader("Pragma", "no-cache");
-    server.sendHeader("Expires", "-1");
-    server.setContentLength(CONTENT_LENGTH_UNKNOWN); // *** BEGIN ***
-    server.send(200, "text/plain", "");
-    
-    File f = SPIFFS.open(FIRMWARE_FILE, "r");
-    int pagesToProgram = f.size() / 256;
-    if (f) {
-        String md5sum = _md5sum(f);
-        flash.enable();
-        flash.chip_erase();
-        while (f.readBytes((char *) buffer, 256) && page < PAGES) {
-            server.sendContent(String(page) + "/" + pagesToProgram + "\n");
-            reverseBitOrder(buffer);
-            flash.page_write(page, buffer);
-            // cleanup buffer
-            initBuffer(buffer);
-            page++;
-        }
-        flash.disable();
-        f.close();
-        _writeFile("/etc/last_flash_md5", md5sum.c_str(), md5sum.length());
-    }
-    
-    server.sendContent("FPGA reset...\n");
-    resetFPGAConfiguration();
-    server.sendContent("done\n");
-    server.sendContent(""); // *** END 1/2 ***
-    server.client().stop(); // *** END 2/2 ***
-}
-*/
 void handleFlash(AsyncWebServerRequest *request, const char *filename) {
     page = 0;
     finished = false;
@@ -489,41 +307,6 @@ void handleDownload(AsyncWebServerRequest *request) {
     }
 }
 
-/*
-void handleUploadFirmware() {
-    handleUpload(FIRMWARE_FILE);
-}
-
-void handleUploadIndexHtml() {
-    handleUpload("/index.html.gz");
-}    
-
-void handleUpload(const char* filename) {
-    if (!_isAuthenticated()) {
-        return;
-    }
-
-    HTTPUpload& upload = server.upload();
-    int totalSize = server.arg("size").toInt();
-
-    if (upload.status == UPLOAD_FILE_START) {
-        fsUploadFile = SPIFFS.open(filename, "w");
-        DBG_OUTPUT_PORT.printf(">> Receiving %s\n", filename);
-    } else if (upload.status == UPLOAD_FILE_WRITE) {
-        if (fsUploadFile) {
-            fsUploadFile.write(upload.buf, upload.currentSize);
-            DBG_OUTPUT_PORT.printf(">> %i/%i\n", upload.totalSize, totalSize);
-        }
-    } else if (upload.status == UPLOAD_FILE_END) {
-        if (fsUploadFile) {
-            fsUploadFile.close();
-            writeMD5FileForFilename(filename);
-            DBG_OUTPUT_PORT.printf(">> %i/%i\n", upload.totalSize, totalSize);
-            DBG_OUTPUT_PORT.printf(">> Done.\n");
-        }
-    }
-}
-*/
 void writeMD5FileForFilename(const char* filename) {
     File f = SPIFFS.open(filename, "r");
     if (f) {
@@ -534,92 +317,7 @@ void writeMD5FileForFilename(const char* filename) {
         f.close();
     }
 }
-/*
-void handleDownloadFirmware() {
-    WiFiClient client = server.client();
-    
-    client.print("HTTP/1.1 200 OK\r\n");
-    client.print("Content-Type: text/plain\r\n");
-    client.print("Content-Length: -1\r\n");
-    client.print("Connection: close\r\n");
-    client.print("Access-Control-Allow-Origin: *\r\n");
-    client.print("\r\n");
-    
-    downloadFile(
-        String(String(firmwareUrl) + ".md5").c_str(), 
-        String(String(FIRMWARE_FILE) + ".orig.md5").c_str()
-    );
-    String msg = downloadFile(firmwareUrl, FIRMWARE_FILE);
 
-    client.stop();
-}
-*/
-/*
-String downloadFile(const char* source, const char* target) {
-    HTTPClient http;
-    String returnValue;
-    DBG_OUTPUT_PORT.printf(">> [HTTP] begin...\n");
-    http.begin(source);
-    DBG_OUTPUT_PORT.printf(">> [HTTP] GET...\n");
-    int httpCode = http.GET();
-    if (httpCode > 0) {
-        DBG_OUTPUT_PORT.printf(">> [HTTP] GET... code: %d\n", httpCode);
-        // file found at server
-        if (httpCode == HTTP_CODE_OK) {
-            // get lenght of document (is -1 when Server sends no Content-Length header)
-            int len = http.getSize();
-            
-            File f = SPIFFS.open(target, "w");
-            if (f) {
-                // create buffer for read
-                uint8_t buff[256] = { 0 };
-
-                // get tcp stream
-                WiFiClient * stream = http.getStreamPtr();
-
-                // read all data from server
-                while (http.connected() && (len > 0 || len == -1)) {
-                    // get available data size
-                    size_t size = stream->available();
-                    size_t bytes2read;
-
-                    if (size) {
-                        bytes2read = ((size > sizeof(buff)) ? sizeof(buff) : size);
-                        // read up to buff size bytes
-                        int c = stream->readBytes(buff, bytes2read);
-                        f.write(buff, bytes2read);
-
-                        // write it to Serial
-                        DBG_OUTPUT_PORT.printf("Got: %i/%i, %i\n", c, len, bytes2read);
-
-                        if(len > 0) {
-                            len -= c;
-                        }
-                    }
-                    yield();
-                }
-                f.close();
-                writeMD5FileForFilename(target);
-            }
-
-            DBG_OUTPUT_PORT.print("\n>> [HTTP] connection closed or file end.\n");
-            if (len == 0) {
-                returnValue = String("OK: file downloaded.");
-            } else {
-                returnValue = String("WARNING: file downloaded, but length unchecked.");
-            }
-        } else {
-            returnValue = String("ERROR: file NOT downloaded.");
-        }
-    } else {
-        DBG_OUTPUT_PORT.printf(">> [HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
-        returnValue = String("ERROR: connect failed.");
-    }
-
-    http.end();
-    return returnValue;
-}
-*/
 void setupArduinoOTA() {
     DBG_OUTPUT_PORT.printf(">> Setting up ArduinoOTA...\n");
     
@@ -706,23 +404,6 @@ void setupWiFi() {
         );
     }
 }
-/*
-*/
-/*
-bool isAuthenticated() {
-    if (!_isAuthenticated()) {
-        server.requestAuthentication(BASIC_AUTH, "Secure Zone", "Please login!\n");
-        return false;
-    }
-    return true;
-}*/
-/*
-void handleAuthenticated(void (*handler)()) {
-    if (isAuthenticated()) {
-        handler();
-    }
-}
-*/
 
 void setupHTTPServer() {
     DBG_OUTPUT_PORT.printf(">> Setting up HTTP server...\n");
@@ -786,40 +467,6 @@ void setupHTTPServer() {
     // set authentication by configured user/pass later
     handler->setAuthentication("Test", "testtest");
 
-/*
-  */  
-        /*
-    server.on("/list", HTTP_GET, [](){
-        handleAuthenticated(handleFileList);
-    });
-    server.on("/dump", HTTP_GET, [](){
-        handleAuthenticated(handleDumpFirmware);
-    });
-    server.on("/flash", HTTP_GET, [](){
-        handleAuthenticated(handleProgramFlash);
-    });
-    server.on("/download", HTTP_GET, [](){
-        handleAuthenticated(handleDownloadFirmware);
-    });
-    server.on("/upload", HTTP_POST, []() {
-        if (isAuthenticated()) {
-            server.send(200, "text/plain", "");
-        }
-    }, handleUploadFirmware);
-    server.on("/upload-index", HTTP_POST, []() {
-        if (isAuthenticated()) {
-            server.send(200, "text/plain", "");
-        }
-    }, handleUploadIndexHtml);
-        
-    server.onNotFound([]() {
-        if (isAuthenticated()) {
-            if (!handleFileRead(server.uri())) {
-                server.send(404, "text/plain", "FileNotFound");
-            }
-        }
-    });
-    */
     server.begin();
 }
 
