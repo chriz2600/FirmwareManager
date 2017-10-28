@@ -142,27 +142,26 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             downloadFile();
         });
+    } else if (command.match(/^\s*flash\s*$/)) {
+        startTransaction(null, function() {
+            flash();
+        });
+    } else if (command.match(/^\s*reset\s*$/)) {
+        startTransaction(null, function() {
+            reset();
+        });
     } else if (command.match(/^\s*file\s*$/)) {
         startTransaction(null, function() {
             fileInputChange();
         });
-    } else if (command.match(/^\s*test\s*$/)) {
-        startTransaction("Test");
-        /*
-        var args = {command: cmd};
-        $.get('...', args, function(result) {
-            (function wait() {
-                if (finish) {
-                    term.echo(result);
-                } else {
-                    setTimeout(wait, 500);
-                }
-            })();
-        });*/
-        setTimeout(function() {
-            endTransaction("...");
-        }, 1000);
-
+    } else if (command.match(/^\s*get\s*$/)) {
+        startTransaction(null, function() {
+            getFirmwareData();
+        });
+    } else if (command.match(/^\s*check\s*$/)) {
+        startTransaction(null, function() {
+            checkFirmware();
+        });
     } else if (command !== '') {
         term.error('unkown command, try:');
         help();
@@ -264,14 +263,7 @@ function uploadFile() {
     client.onload = function(e) {
         if (client.status >= 200 && client.status < 400) {
             $.ajax("/firmware.rbf.md5").done(function (data) {
-                endTransaction(
-                    progress(100, progressSize) + ' [[b;green;]OK]\n'
-                    + "MD5 Check:\n"
-                    + (lastMD5 == data
-                       ? "    " + lastMD5 + "\n == " + data + " [[b;green;]OK]"
-                       : "    " + lastMD5 + "\n[[b;red;] != ]" + data + " [[b;red;]FAIL]")
-                    + (lastMD5 == data ? "" : "\nPlease try to re-upload file.")
-                );
+                endTransactionWithMD5Check(lastMD5, data, "Please try to re-download file.");
             }).fail(function() {
                 endTransaction('Error reading checksum', true);    
             });
@@ -295,6 +287,41 @@ function uploadFile() {
     client.send(formData);
 }
 
+function getFirmwareData() {
+    $.ajax("/etc/last_flash_md5").done(function (data) {
+        var lastFlashMd5 = $.trim(data);
+        endTransaction('Currently installed firmware:\nMD5: [[b;#fff;]' + lastFlashMd5 + ']');
+    }).fail(function() {
+        endTransaction("Error resetting fpga!", true);
+    });
+
+}
+function checkFirmware() {
+    $.ajax("/etc/last_flash_md5").done(function (data) {
+        var lastFlashMd5 = $.trim(data);
+        $.ajax("http://dc.i74.de/firmware.rbf.md5").done(function (data) {
+            var origMd5 = $.trim(data);
+            if (lastFlashMd5 == origMd5) {
+                endTransaction('Currently installed firmware is already the latest version.');
+            } else {
+                endTransaction('New firmware available.');
+            }
+        }).fail(function() {
+            endTransaction('Error reading original checksum', true);
+        });
+    }).fail(function() {
+        endTransaction("Error resetting fpga!", true);
+    });
+}
+
+function reset() {
+    $.ajax("/reset").done(function (data) {
+        endTransaction('FPGA reset [[b;green;]OK]\n');
+    }).fail(function() {
+        endTransaction("Error resetting fpga!", true);
+    });
+}
+
 function downloadFile() {
     //startSpinner(term, spinners["shark"]);
     term.set_prompt(progress(0, progressSize));
@@ -308,14 +335,7 @@ function downloadFile() {
                         var calcMd5 = $.trim(data);
                         $.ajax("http://dc.i74.de/firmware.rbf.md5").done(function (data) {
                             var origMd5 = $.trim(data);
-                            endTransaction(
-                                'Download: [[b;green;]OK]\n'
-                                + "MD5 Check:\n"
-                                + (calcMd5 == origMd5
-                                    ? "    " + origMd5 + "\n == " + calcMd5 + " [[b;green;]OK]"
-                                    : "    " + origMd5 + "\n[[b;red;] != ]" + calcMd5 + " [[b;red;]FAIL]")
-                                + (calcMd5 == origMd5 ? "" : "\nPlease try to re-download file.")
-                            );
+                            endTransactionWithMD5Check(calcMd5, origMd5, "Please try to re-download file.");
                         }).fail(function() {
                             endTransaction('Error reading original checksum', true);
                         });
@@ -334,6 +354,61 @@ function downloadFile() {
         endTransaction("Error starting download!", true);
     });
 }
+
+function flash() {
+    term.set_prompt(progress(0, progressSize));
+
+    var client = new XMLHttpRequest();
+
+    client.onerror = function(e) {
+        endTransaction('[[b;red;]FAIL]\n');
+    };
+
+    client.onload = function() {
+        term.set_prompt(progress(100, progressSize));
+        $.ajax("/firmware.rbf.md5").done(function (data) {
+            var calcMd5 = $.trim(data);
+            $.ajax("/etc/last_flash_md5").done(function (data) {
+                var lastFlashMd5 = $.trim(data);
+                endTransactionWithMD5Check(calcMd5, lastFlashMd5, "Please try to re-flashing.");
+            }).fail(function() {
+                endTransaction('Error reading checksum', true);
+            });
+        }).fail(function() {
+            endTransaction('Error reading checksum', true);
+        });
+    };
+
+    client.onreadystatechange = function() {
+        if (client.readyState == 3) {
+            var lines = client.responseText.split(/\n/);
+            lines.pop();
+            var pgrs = $.trim(lines.pop());
+            term.set_prompt(progress(pgrs, progressSize));
+        }
+    };
+
+    client.onabort = function(e) {
+        endTransaction("Flashing aborted!", true);
+    };
+
+    
+    client.open("GET", "/flash");
+    client.send(null);
+
+}
+
+function endTransactionWithMD5Check(chk1, chk2, msg) {
+    endTransaction(
+        progress(100, progressSize) + ' [[b;green;]OK]\n'
+        + "MD5 Check:\n"
+        + (chk1 == chk2
+            ? "    " + chk1 + "\n == " + chk2 + " [[b;green;]OK]"
+            : "    " + chk1 + "\n[[b;red;] != ]" + chk2 + " [[b;red;]FAIL]")
+        + (chk1 == chk2 ? "" : "\n" + msg)          
+    );
+}
+
 /*
 var i;
 var timer;

@@ -771,9 +771,12 @@ void setupHTTPServer() {
     });
 
     server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
         DBG_OUTPUT_PORT.printf("FPGA reset requested...\n");
         resetFPGAConfiguration();
-        request->send(200, "text/plain", "OK");
+        request->send(200, "text/plain", "OK\n");
         DBG_OUTPUT_PORT.printf("...delivered.\n");
     });
 
