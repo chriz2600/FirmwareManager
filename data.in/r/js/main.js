@@ -235,10 +235,17 @@ function help(full) {
             + "stored in the flash of the WiFi chip.\n"
             + " \n";
     }
+    msg += "[[b;#fff;]get]:      get checksum of installed firmware\n";
+    msg += "[[b;#fff;]check]:    check if new firmware is available\n";
     msg += "[[b;#fff;]select]:   select file to upload\n";
+    msg += "[[b;#fff;]file]:     show information on selected file\n";
     msg += "[[b;#fff;]upload]:   upload selected file\n";
     msg += "[[b;#fff;]download]: download latest flash file from dc.i74.de\n";
-    msg += "[[b;#fff;]flash]:    flash uploaded file\n";
+    msg += "[[b;#fff;]flash]:    flash FPGA from staging area\n";
+    msg += "[[b;#fff;]reset]:    reset FPGA\n";
+    msg += "[[b;#fff;]clear]:    clear terminal screen\n";
+    msg += "[[b;#fff;]exit]:     end terminal\n";
+    
     typed_message(term, msg, 1);
 }
 
@@ -302,7 +309,19 @@ function uploadFile() {
 function getFirmwareData() {
     $.ajax("/etc/last_flash_md5").done(function (data) {
         var lastFlashMd5 = $.trim(data);
-        endTransaction('Currently installed firmware:\nMD5: [[b;#fff;]' + lastFlashMd5 + ']');
+        $.ajax("/firmware.rbf.md5").done(function (data) {
+            var stagedMd5 = $.trim(data);
+            endTransaction(
+                  'Installed firmware:\n'
+                + ' MD5: [[b;#fff;]' + lastFlashMd5 + ']\n'
+                + 'Staged firmware:\n'
+                + ' MD5: [[b;#fff;]' + stagedMd5 + ']'
+            );
+        }).fail(function() {
+            endTransaction("Error resetting fpga!", true);
+        });
+
+        
     }).fail(function() {
         endTransaction("Error resetting fpga!", true);
     });
