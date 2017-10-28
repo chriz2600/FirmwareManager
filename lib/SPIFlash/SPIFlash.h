@@ -19,6 +19,12 @@ class SPIFlash
     void page_read(unsigned int page_number, uint8_t *page_buffer);
     void page_write(unsigned int page_number, uint8_t *page_buffer);
     void chip_erase();
+
+    void page_read_async(unsigned int page_number, uint8_t *page_buffer);
+    void page_write_async(unsigned int page_number, uint8_t *page_buffer);
+    void chip_erase_async();
+    bool is_busy_async();
+    
     void enable();
     void disable();
 private:

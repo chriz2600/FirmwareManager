@@ -32,7 +32,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define NCONFIG 5
 #define DBG_OUTPUT_PORT Serial
 #define FIRMWARE_FILE "/firmware.rbf"
-#define FIRMWARE_FILE_ORIG "/firmware.orig.rbf"
+//#define FIRMWARE_FILE_ORIG "/firmware.orig.rbf"
 #define FIRMWARE_URL "http://dc.i74.de/firmware.rbf"
 
 #define PAGES 8192 // 8192 pages x 256 bytes = 2MB = 16MBit
@@ -53,10 +53,22 @@ const uint8_t empty_buffer[256] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x
 //ESP8266WebServer server(80);
 AsyncWebServer server(80);
 SPIFlash flash(CS);
-
-static AsyncClient *aClient = NULL;
-File downloadFile;
 MD5Builder md5;
+
+/*
+    Variables needed in Callbacks
+*/
+static AsyncClient *aClient = NULL;
+File flashFile;
+bool headerFound = false;
+String header = String();
+int totalLength = -1;
+int readLength = -1;
+//uint8_t buffer[256];
+unsigned int page = 0;
+bool finished = false;
+
+
 
 /*
 String getContentType(String filename){
@@ -181,7 +193,6 @@ bool copyBlockwise(String source, String destination, unsigned int length) {
 void initBuffer(uint8_t *buffer) {
     for (int i = 0 ; i < 256 ; i++) { 
         buffer[i] = 0xff; 
-        yield(); 
     }
 }
 /*
@@ -215,45 +226,6 @@ void handleFileList() {
     server.send(200, "text/json", output);
 }
 */
-/*
-void handleProgramFlash() {
-    unsigned int page = 0;
-    uint8_t buffer[256];
-    // initialze
-    initBuffer(buffer);
-    
-    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    server.sendHeader("Pragma", "no-cache");
-    server.sendHeader("Expires", "-1");
-    server.setContentLength(CONTENT_LENGTH_UNKNOWN); // *** BEGIN ***
-    server.send(200, "text/plain", "");
-    
-    File f = SPIFFS.open(FIRMWARE_FILE, "r");
-    int pagesToProgram = f.size() / 256;
-    if (f) {
-        String md5sum = _md5sum(f);
-        flash.enable();
-        flash.chip_erase();
-        while (f.readBytes((char *) buffer, 256) && page < PAGES) {
-            server.sendContent(String(page) + "/" + pagesToProgram + "\n");
-            reverseBitOrder(buffer);
-            flash.page_write(page, buffer);
-            // cleanup buffer
-            initBuffer(buffer);
-            page++;
-        }
-        flash.disable();
-        f.close();
-        _writeFile("/etc/last_flash_md5", md5sum.c_str(), md5sum.length());
-    }
-    
-    server.sendContent("FPGA reset...\n");
-    resetFPGAConfiguration();
-    server.sendContent("done\n");
-    server.sendContent(""); // *** END 1/2 ***
-    server.client().stop(); // *** END 2/2 ***
-}
-*/
 void resetFPGAConfiguration() {
     pinMode(NCONFIG, OUTPUT);
     digitalWrite(NCONFIG, LOW);
@@ -267,7 +239,6 @@ void reverseBitOrder(uint8_t *buffer) {
         buffer[i] = (buffer[i] & 0xF0) >> 4 | (buffer[i] & 0x0F) << 4;
         buffer[i] = (buffer[i] & 0xCC) >> 2 | (buffer[i] & 0x33) << 2;
         buffer[i] = (buffer[i] & 0xAA) >> 1 | (buffer[i] & 0x55) << 1;
-        yield(); 
     }
 }
 /*
@@ -310,15 +281,11 @@ bool _isAuthenticated(AsyncWebServerRequest *request) {
     return request->authenticate("Test", "testtest");
 }
 
-void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
     if(!_isAuthenticated(request)) {
         return;
     }
     if (!index) {
-        // normalize filename
-        if (filename == "index.html.gz") filename = String("/index.html.gz");
-        else filename = String(FIRMWARE_FILE);
-        
         fname = filename.c_str();
         md5.begin();
         request->_tempFile = SPIFFS.open(filename, "w");
@@ -339,16 +306,113 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
     }
 }
 
-bool headerFound;
-String header;
+int writeProgress(uint8_t *buffer, size_t maxLen, int read, int total) {
+    char msg[64];
+    int len;
+
+    sprintf(msg, "%i\n", total <= 0 ? 0 : (int)(read * 100 / total));
+    len = strlen(msg);
+    memcpy(buffer, msg, (len > maxLen ? maxLen : len));
+    return len;
+}
+
+/*
+void handleProgramFlash() {
+    unsigned int page = 0;
+    uint8_t buffer[256];
+    // initialze
+    initBuffer(buffer);
+    
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.sendHeader("Pragma", "no-cache");
+    server.sendHeader("Expires", "-1");
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN); // *** BEGIN ***
+    server.send(200, "text/plain", "");
+    
+    File f = SPIFFS.open(FIRMWARE_FILE, "r");
+    int pagesToProgram = f.size() / 256;
+    if (f) {
+        String md5sum = _md5sum(f);
+        flash.enable();
+        flash.chip_erase();
+        while (f.readBytes((char *) buffer, 256) && page < PAGES) {
+            server.sendContent(String(page) + "/" + pagesToProgram + "\n");
+            reverseBitOrder(buffer);
+            flash.page_write(page, buffer);
+            // cleanup buffer
+            initBuffer(buffer);
+            page++;
+        }
+        flash.disable();
+        f.close();
+        _writeFile("/etc/last_flash_md5", md5sum.c_str(), md5sum.length());
+    }
+    
+    server.sendContent("FPGA reset...\n");
+    resetFPGAConfiguration();
+    server.sendContent("done\n");
+    server.sendContent(""); // *** END 1/2 ***
+    server.client().stop(); // *** END 2/2 ***
+}
+*/
+void handleFlash(AsyncWebServerRequest *request, const char *filename) {
+    page = 0;
+    finished = false;
+    totalLength = -1;
+    readLength = -1;
+    md5.begin();
+    flashFile = SPIFFS.open(filename, "r");
+
+    if (flashFile) {
+        totalLength = flashFile.size() / 256;
+
+        flash.enable();
+        flash.chip_erase_async();
+    
+        AsyncWebServerResponse *response = request->beginChunkedResponse(
+            "text/plain", [filename](uint8_t *buffer, size_t maxLen, size_t index) -> size_t 
+        {
+            if (finished) {
+                return 0;
+            }
+
+            int _read = 0;
+            if (!flash.is_busy_async()) {
+                if ((_read = flashFile.readBytes((char *) buffer, 256)) && page < PAGES) {
+                    md5.add(buffer, _read);                
+                    reverseBitOrder(buffer);
+                    flash.page_write_async(page, buffer);
+                    initBuffer(buffer); // cleanup buffer
+                    page++;
+                } else {
+                    flash.disable();
+                    flashFile.close();
+                    md5.calculate();
+                    String md5sum = md5.toString();
+                    _writeFile("/etc/last_flash_md5", md5sum.c_str(), md5sum.length());
+                    finished = true;
+                }
+            }
+            readLength = page;
+            return writeProgress(buffer, maxLen, readLength, totalLength);
+        });
+
+        response->addHeader("Server", "Dreamcast HDMI");
+        request->send(response);
+    } else {
+        request->send(404);
+    }
+}
 
 void handleDownload(AsyncWebServerRequest *request) {
-    header = String();
     headerFound = false;
+    header = String();
+    totalLength = -1;
+    readLength = -1;
     md5.begin();
-    downloadFile = SPIFFS.open(FIRMWARE_FILE_ORIG, "w");
+    flashFile = SPIFFS.open(FIRMWARE_FILE, "w");
 
-    if (downloadFile) {
+    if (flashFile) {
         aClient = new AsyncClient();
 
         aClient->onError([](void *arg, AsyncClient *client, int error) {
@@ -358,76 +422,68 @@ void handleDownload(AsyncWebServerRequest *request) {
         }, NULL);
     
         aClient->onConnect([](void *arg, AsyncClient *client) {
-            Serial.println("Connected");
+            DBG_OUTPUT_PORT.println("Connected");
             aClient->onError(NULL, NULL);
 
             client->onDisconnect([](void *arg, AsyncClient *c) {
-                downloadFile.close();
+                DBG_OUTPUT_PORT.println("onDisconnect");
+                flashFile.close();
                 md5.calculate();
                 String md5sum = md5.toString();
-                _writeFile((String(FIRMWARE_FILE_ORIG) + ".md5").c_str(), md5sum.c_str(), md5sum.length());
-                Serial.println("Disconnected");
+                _writeFile((String(FIRMWARE_FILE) + ".md5").c_str(), md5sum.c_str(), md5sum.length());
+                DBG_OUTPUT_PORT.println("Disconnected");
                 aClient = NULL;
                 delete c;
             }, NULL);
         
             client->onData([](void *arg, AsyncClient *c, void *data, size_t len) {
-                DBG_OUTPUT_PORT.printf("Data 1: %i\n", len);
                 uint8_t* d = (uint8_t*) data;
 
                 if (!headerFound) {
                     String sData = String((char*) data);
                     int idx = sData.indexOf("\r\n\r\n");
                     if (idx == -1) {
+                        DBG_OUTPUT_PORT.printf("header not found. Storing buffer.\n");
                         header += sData;
                         return;
                     } else {
                         header += sData.substring(0, idx + 4);
+                        header.toLowerCase();
+                        int clstart = header.indexOf("content-length: ");
+                        if (clstart != -1) {
+                            clstart += 16;
+                            int clend = header.indexOf("\r\n", clstart);
+                            if (clend != -1) {
+                                totalLength = atoi(header.substring(clstart, clend).c_str());
+                            }
+                        }
                         d = (uint8_t*) sData.substring(idx + 4).c_str();
                         len = (len - (idx + 4));
                         headerFound = true;
+                        readLength = 0;
+                        DBG_OUTPUT_PORT.printf("header content length found: %i\n", totalLength);
                     }
                 }
-
-                DBG_OUTPUT_PORT.printf("Data 2: %i\n", len);
-                downloadFile.write(d, len);
+                readLength += len;
+                DBG_OUTPUT_PORT.printf("write: %i, %i/%i\n", len, readLength, totalLength);
+                flashFile.write(d, len);
                 md5.add(d, len);
             }, NULL);
         
             //send the request
+            DBG_OUTPUT_PORT.println("Requesting firmware...");
             client->write("GET /firmware.rbf HTTP/1.0\r\nHost: dc.i74.de\r\n\r\n");
-            // Content-Length: 368011
         }, NULL);
 
         DBG_OUTPUT_PORT.println("Trying to connect");
-        if(!aClient->connect("dc.i74.de", 80)) {
+        if (!aClient->connect("dc.i74.de", 80)) {
             DBG_OUTPUT_PORT.println("Connect Fail");
             AsyncClient *client = aClient;
             aClient = NULL;
             delete client;
         }
 
-        AsyncWebServerResponse *response = request->beginChunkedResponse(
-            "text/plain", [](uint8_t *buffer, size_t maxLen, size_t index) -> size_t 
-        {
-            char msg[64];
-            int len;
-            //Write up to "maxLen" bytes into "buffer" and return the amount written.
-            //index equals the amount of bytes that have been already sent
-            //You will be asked for more data until 0 is returned
-            //Keep in mind that you can not delay or yield waiting for more data!
-            if (!aClient) {
-                return 0;
-            }
-
-            DBG_OUTPUT_PORT.println("HERE");
-            sprintf(msg, "...\n");
-            len = strlen(msg);
-            memcpy(buffer, msg, (len > maxLen ? maxLen : len));
-            return len;
-          });
-          response->addHeader("Server", "ESP Async Web Server");
-          request->send(response);
+        request->send(200);
     } else {
         request->send(500);
     }
@@ -676,13 +732,49 @@ void setupHTTPServer() {
             return request->requestAuthentication();
         }
         request->send(200);
-    }, handleUpload);
+    }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+        handleUpload(request, FIRMWARE_FILE, index, data, len, final);
+    });
+
+    server.on("/upload-index", HTTP_POST, [](AsyncWebServerRequest *request){
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        request->send(200);
+    }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+        handleUpload(request, "/index.html.gz", index, data, len, final);
+    });
 
     server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request){
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
         handleDownload(request);
+    });
+
+    server.on("/flash", HTTP_GET, [](AsyncWebServerRequest *request){
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        handleFlash(request, FIRMWARE_FILE);
+    });
+
+    server.on("/progress", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        DBG_OUTPUT_PORT.printf("progress requested...\n");
+        char msg[64];
+        sprintf(msg, "%i\n", totalLength <= 0 ? 0 : (int)(readLength * 100 / totalLength));
+        request->send(200, "text/plain", msg);
+        DBG_OUTPUT_PORT.printf("...delivered: %s.\n", msg);
+    });
+
+    server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request) {
+        DBG_OUTPUT_PORT.printf("FPGA reset requested...\n");
+        resetFPGAConfiguration();
+        request->send(200, "text/plain", "OK");
+        DBG_OUTPUT_PORT.printf("...delivered.\n");
     });
 
     AsyncStaticWebHandler* handler = &server

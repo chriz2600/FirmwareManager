@@ -6,17 +6,30 @@ SPIFlash::SPIFlash(int cs)
     pinMode(_cs, INPUT);
 }
 
-void SPIFlash::not_busy() {
+bool SPIFlash::is_busy_async() {
+    bool ret;
     digitalWrite(_cs, HIGH);  
     digitalWrite(_cs, LOW);
     SPI.transfer(WB_READ_STATUS_REG_1);       
-    while (SPI.transfer(0) & 1) {
-        yield();
-    }; 
+    ret = (SPI.transfer(0) & 1);
     digitalWrite(_cs, HIGH);  
+    return ret;
 }
 
-void SPIFlash::page_read(unsigned int page_number, uint8_t *page_buffer) {
+void SPIFlash::not_busy() {
+    while (is_busy_async()) {
+        yield();
+    }
+    // digitalWrite(_cs, HIGH);  
+    // digitalWrite(_cs, LOW);
+    // SPI.transfer(WB_READ_STATUS_REG_1);       
+    // while (SPI.transfer(0) & 1) {
+    //     yield();
+    // }; 
+    // digitalWrite(_cs, HIGH);  
+}
+
+void SPIFlash::page_read_async(unsigned int page_number, uint8_t *page_buffer) {
     digitalWrite(_cs, HIGH);
     digitalWrite(_cs, LOW);
     SPI.transfer(WB_READ_DATA);
@@ -28,13 +41,16 @@ void SPIFlash::page_read(unsigned int page_number, uint8_t *page_buffer) {
     SPI.transfer(0);
     for (int i = 0; i < 256; ++i) {
         page_buffer[i] = SPI.transfer(0);
-        yield();
     }
     digitalWrite(_cs, HIGH);
+}
+
+void SPIFlash::page_read(unsigned int page_number, uint8_t *page_buffer) {
+    page_read_async(page_number, page_buffer);
     not_busy();
 }
 
-void SPIFlash::chip_erase(void) {
+void SPIFlash::chip_erase_async(void) {
     digitalWrite(_cs, HIGH);
     digitalWrite(_cs, LOW);  
     SPI.transfer(WB_WRITE_ENABLE);
@@ -42,10 +58,14 @@ void SPIFlash::chip_erase(void) {
     digitalWrite(_cs, LOW);
     SPI.transfer(WB_CHIP_ERASE);
     digitalWrite(_cs, HIGH);
+}
+
+void SPIFlash::chip_erase(void) {
+    chip_erase_async();
     not_busy();
 }
 
-void SPIFlash::page_write(unsigned int page_number, uint8_t *page_buffer) {
+void SPIFlash::page_write_async(unsigned int page_number, uint8_t *page_buffer) {
     digitalWrite(_cs, HIGH);
     digitalWrite(_cs, LOW);  
     SPI.transfer(WB_WRITE_ENABLE);
@@ -56,9 +76,13 @@ void SPIFlash::page_write(unsigned int page_number, uint8_t *page_buffer) {
     SPI.transfer((page_number >>  0) & 0xFF);
     SPI.transfer(0);
     for (int i = 0; i < 256; ++i) {
-      SPI.transfer(page_buffer[i]);
+        SPI.transfer(page_buffer[i]);
     }
     digitalWrite(_cs, HIGH);
+}    
+
+void SPIFlash::page_write(unsigned int page_number, uint8_t *page_buffer) {
+    page_write_async(page_number, page_buffer);
     not_busy();
 }
 

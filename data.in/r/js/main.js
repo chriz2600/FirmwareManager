@@ -260,16 +260,16 @@ function uploadFile() {
     client.onerror = function(e) {
         endTransaction("Error during upload!", true);
     };
- 
+
     client.onload = function(e) {
         if (client.status >= 200 && client.status < 400) {
             $.ajax("/firmware.rbf.md5").done(function (data) {
                 endTransaction(
                     progress(100, progressSize) + ' [[b;green;]OK]\n'
-                    + "MD5 Check: " 
-                    + (lastMD5 == data 
-                       ? "[[b;green;]OK]" 
-                       : "[[b;red;]MD5 mismatch: " + data + "]")
+                    + "MD5 Check:\n"
+                    + (lastMD5 == data
+                       ? "    " + lastMD5 + "\n == " + data + " [[b;green;]OK]"
+                       : "    " + lastMD5 + "\n[[b;red;] != ]" + data + " [[b;red;]FAIL]")
                     + (lastMD5 == data ? "" : "\nPlease try to re-upload file.")
                 );
             }).fail(function() {
@@ -279,7 +279,7 @@ function uploadFile() {
             endTransaction('Error uploading file: ' + client.status, true);
         }
     };
- 
+
     client.upload.onprogress = function(e) {
         var p = Math.round(100 / e.total * e.loaded);
         term.set_prompt(progress(p - 1, progressSize));
@@ -296,34 +296,45 @@ function uploadFile() {
 }
 
 function downloadFile() {
-    startSpinner(term, spinners["shark"]);
-
+    //startSpinner(term, spinners["shark"]);
+    term.set_prompt(progress(0, progressSize));
     $.ajax("/download").done(function (data) {
-        $.ajax("/firmware.rbf.md5").done(function (data) {
-            var calcMd5 = $.trim(data);
-            $.ajax("/firmware.rbf.orig.md5").done(function (data) {
-                var origMd5 = $.trim(data);
-                endTransaction(
-                    'Download: [[b;green;]OK]\n'
-                    + "MD5 Check: " 
-                    + (calcMd5 == origMd5 
-                        ? "[[b;green;]OK]" 
-                        : "[[b;red;]MD5 mismatch: " + data + "]")
-                    + (calcMd5 == origMd5 ? "" : "\nPlease try to re-download file.")
-                );
-            }).fail(function() {
-                endTransaction('Error reading original checksum', true);    
-            });
-        }).fail(function() {
-            endTransaction('Error reading checksum', true);    
-        });
+        function progressPoll() {
+            $.ajax("/progress").done(function (data) {
+                var pgrs = $.trim(data);
+                term.set_prompt(progress(pgrs, progressSize));
+                if (pgrs == "100") {
+                    $.ajax("/firmware.rbf.md5").done(function (data) {
+                        var calcMd5 = $.trim(data);
+                        $.ajax("http://dc.i74.de/firmware.rbf.md5").done(function (data) {
+                            var origMd5 = $.trim(data);
+                            endTransaction(
+                                'Download: [[b;green;]OK]\n'
+                                + "MD5 Check:\n"
+                                + (calcMd5 == origMd5
+                                    ? "    " + origMd5 + "\n == " + calcMd5 + " [[b;green;]OK]"
+                                    : "    " + origMd5 + "\n[[b;red;] != ]" + calcMd5 + " [[b;red;]FAIL]")
+                                + (calcMd5 == origMd5 ? "" : "\nPlease try to re-download file.")
+                            );
+                        }).fail(function() {
+                            endTransaction('Error reading original checksum', true);
+                        });
+                    }).fail(function() {
+                        endTransaction('Error reading checksum', true);
+                    });
+                } else {
+                    setTimeout(progressPoll, 1500);
+                }
+            }).fail(function () {
+                endTransaction('Error reading progress', true);
+            })
+        };
+        setTimeout(progressPoll, 1500);
     }).fail(function() {
-        endTransaction("Error during download!", true);
-    }).always(function() {
-        stopSpinner();
+        endTransaction("Error starting download!", true);
     });
 }
-
+/*
 var i;
 var timer;
 var prompt;
@@ -341,3 +352,4 @@ function startSpinner(term, spinner) {
 function stopSpinner() {
     clearInterval(timer);
 }
+*/
