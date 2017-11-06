@@ -49,7 +49,7 @@ function fileInputChange() {
             var md5 = spark.append(event.target.result);
             lastMD5 = spark.end();
             endTransaction("Selected file:\n"
-                + "Name: " + files[0].name + "\n" 
+                + "Name: " + files[0].name + "\n"
                 + "Size: " + files[0].size + " Byte\n"
                 + "MD5:  [[b;#fff;]" + lastMD5 + "]"
             );
@@ -160,8 +160,12 @@ var term = $('#term').terminal(function(command, term) {
         });
     } else if (command.match(/^\s*check\s*$/)) {
         startTransaction(null, function() {
-            getFirmwareData(true);
+            getFirmwareData();
         });
+    } else if (command.match(/^\s*setup\s*$/)) {
+        //startTransaction(null, function() {
+            setupMode();
+        //});
     } else if (command !== '') {
         term.error('unkown command, try:');
         help();
@@ -174,7 +178,11 @@ var term = $('#term').terminal(function(command, term) {
     exit: false,
     onInit: function(term) {
         set_size();
-        typed_message(term, 'Type [[b;#fff;]help] to get help!\n', 36);
+        typed_message(term, 'Type [[b;#fff;]help] to get help!\n', 36, function() {
+            startTransaction(null, function() {
+                checkSetupStatus();
+            });
+        });
     },
     completion: [
         "help",
@@ -186,6 +194,7 @@ var term = $('#term').terminal(function(command, term) {
         "flash",
         "reset",
         "file",
+        "setup",
         "exit"
     ],
     prompt: 'dc-hdmi> ',
@@ -215,7 +224,6 @@ function set_size() {
     scanlines[0].style.setProperty("--time", time);
     tv[0].style.setProperty("--width", $(window).width());
     tv[0].style.setProperty("--height", height);
-    
 }
 
 function help(full) {
@@ -244,8 +252,9 @@ function help(full) {
     msg += "[[b;#fff;]flash]:    flash FPGA from staging area\n";
     msg += "[[b;#fff;]reset]:    reset FPGA\n";
     msg += "[[b;#fff;]clear]:    clear terminal screen\n";
+    msg += "[[b;#fff;]setup]:    enter setup mode\n";
     msg += "[[b;#fff;]exit]:     end terminal\n";
-    
+
     typed_message(term, msg, 1);
 }
 
@@ -284,7 +293,7 @@ function uploadFile() {
             $.ajax("/firmware.rbf.md5").done(function (data) {
                 endTransactionWithMD5Check(lastMD5, data, "Please try to re-download file.");
             }).fail(function() {
-                endTransaction('Error reading checksum', true);    
+                endTransaction('Error reading checksum', true);
             });
         } else {
             endTransaction('Error uploading file: ' + client.status, true);
@@ -295,7 +304,7 @@ function uploadFile() {
         var p = Math.round(100 / e.total * e.loaded);
         term.set_prompt(progress(p - 1, progressSize));
     };
-    
+
     client.onabort = function(e) {
         endTransaction("Abort!", true);
     };
@@ -304,6 +313,107 @@ function uploadFile() {
 
     client.open("POST", "/upload?size=" + file.size);
     client.send(formData);
+}
+
+var setupData = {};
+var setupDataMapping = {
+    ssid: "WiFi SSID",
+    password : "WiFi Password"
+};
+
+function setupDataDisplayToString() {
+    var value = " \n";
+    for (x in setupData) {
+        var t = setupDataMapping[x] || x;
+        value += t + ": " + setupData[x] + "\n";
+    }
+    return value;
+}
+
+function setupMode() {
+    var hint = "(leave blank to skip, enter space to set empty)";
+    var history = term.history();
+    history.disable();
+
+    var questions = [
+        {
+            q : 'WiFi SSID? ' + hint + ' ', cb: function(value) {
+                setupData.ssid = value;
+            }
+        },
+        {
+            q : 'WiFi Password? ' + hint + ' ', cb: function(value) {
+                setupData.password = value;
+            }
+        },
+        {
+            pc: function() {
+                if (JSON.stringify(setupData) == JSON.stringify({})) {
+                    term.error("no changes made.");
+                    return false;
+                }
+                return true;
+            },
+            q : function() {
+                return setupDataDisplayToString(setupData) + ' \nSave changes? ';
+            },
+            cb: function(value) {
+                if (value.match(/^y|yes$/)) {
+                    // start saving transaction
+                    startTransaction("saving setup...", function() {
+                        setTimeout(function() {
+                            endTransaction('[[b;#fff;]Done] setup saved.\n');
+                        }, 2000);
+                    });
+                } else {
+                    term.error("discarded setup");
+                }
+                // reset setupData
+                setupData = {};
+            }
+        }
+    ];
+    var next = function() {
+        var n = questions.shift();
+        var v;
+        if (n) {
+            n.pc = n.pc || function() { return true; };
+            if (n.pc()) {
+                term.push(function(command) {
+                    term.pop();
+                    var lm = command.match(/^(.+)$/i);
+                    if (lm) {
+                        lm[0] = $.trim(lm[0]);
+                        if (n.cb) {
+                            n.cb(lm[0]);
+                        }
+                    }
+                    next();
+                }, {
+                    prompt: typeof(n.q) == "function" ? n.q() : n.q
+                });
+            } else {
+                history.enable();
+            }
+        } else {
+            history.enable();
+        }
+    }
+
+    next();
+}
+
+function checkSetupStatus() {
+    $.ajax("/issetupmode").done(function (data) {
+        var setupStatus = $.trim(data);
+        if (setupStatus === "false") {
+            endTransaction();
+        } else {
+
+        }
+    }).fail(function() {
+        endTransaction("Error checking setup status!", true);
+    });
 }
 
 function getFirmwareData() {
@@ -321,7 +431,7 @@ function getFirmwareData() {
                   + 'Official firmware:\n'
                   + ' MD5: [[b;#fff;]' + origMd5 + ']\n'
                   + '\n'
-                  + ((lastFlashMd5 == origMd5) 
+                  + ((lastFlashMd5 == origMd5)
                     ? 'Currently installed firmware is already the latest version.'
                     : 'New firmware available.')
                 );
@@ -432,7 +542,7 @@ function flash() {
         endTransaction("Flashing aborted!", true);
     };
 
-    
+
     client.open("GET", "/flash");
     client.send(null);
 
@@ -445,7 +555,7 @@ function endTransactionWithMD5Check(chk1, chk2, msg) {
         + (chk1 == chk2
             ? "    " + chk1 + "\n == " + chk2 + " [[b;green;]OK]"
             : "    " + chk1 + "\n[[b;red;] != ]" + chk2 + " [[b;red;]FAIL]")
-        + (chk1 == chk2 ? "" : "\n" + msg)          
+        + (chk1 == chk2 ? "" : "\n" + msg)
     );
 }
 

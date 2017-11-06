@@ -23,8 +23,10 @@
 
 char ssid[64];
 char password[64];
-char otaPassword[64]; 
 char firmwareUrl[1024] = FIRMWARE_URL;
+char otaPassword[64] = "testtest"; 
+char httpAuthUser[64] = "Test";
+char httpAuthPass[64] = "testtest";
 const char* host = "dc-firmware-manager";
 const char* WiFiAPPSK = "geheim1234";
 IPAddress ipAddress( 192, 168, 4, 1 );
@@ -76,6 +78,19 @@ void setupCredentials(void) {
     _readFile("/etc/password", password, 64);
     _readFile("/etc/ota_pass", otaPassword, 64);
     _readFile("/etc/firmware_url", firmwareUrl, 1024);
+    _readFile("/etc/http_auth_user", httpAuthUser, 64);
+    _readFile("/etc/http_auth_pass", httpAuthPass, 64);
+
+    if (DEBUG) {
+        DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
+        DBG_OUTPUT_PORT.printf("| /etc/ssid           -> ssid:         [%s]\n", ssid);
+        DBG_OUTPUT_PORT.printf("| /etc/password       -> password:     [%s]\n", password);
+        DBG_OUTPUT_PORT.printf("| /etc/ota_pass       -> ota_pass:     [%s]\n", otaPassword);
+        DBG_OUTPUT_PORT.printf("| /etc/firmware_url   -> firmwareUrl:  [%s]\n", firmwareUrl);
+        DBG_OUTPUT_PORT.printf("| /etc/http_auth_user -> httpAuthUser: [%s]\n", httpAuthUser);
+        DBG_OUTPUT_PORT.printf("| /etc/http_auth_pass -> httpAuthPass: [%s]\n", httpAuthPass);
+        DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
+    }
 }
 
 void setupAPMode(void) {
@@ -122,7 +137,7 @@ void reverseBitOrder(uint8_t *buffer) {
 }
 
 bool _isAuthenticated(AsyncWebServerRequest *request) {
-    return request->authenticate("Test", "testtest");
+    return request->authenticate(httpAuthUser, httpAuthPass);
 }
 
 void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
@@ -437,11 +452,18 @@ void setupHTTPServer() {
         DBG_OUTPUT_PORT.printf("...delivered.\n");
     });
 
+    server.on("/issetupmode", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        request->send(200, "text/plain", inInitialSetupMode ? "true\n" : "false\n");
+    });
+
     AsyncStaticWebHandler* handler = &server
         .serveStatic("/", SPIFFS, "/")
         .setDefaultFile("index.html");
     // set authentication by configured user/pass later
-    handler->setAuthentication("Test", "testtest");
+    handler->setAuthentication(httpAuthUser, httpAuthPass);
 
     server.begin();
 }

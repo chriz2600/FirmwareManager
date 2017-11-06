@@ -5,3 +5,5 @@
 data/etc/password
 data/etc/ssid
 data/etc/ota_pass
+data/etc/http_auth_pass
+data/etc/http_auth_user
