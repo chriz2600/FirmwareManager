@@ -168,6 +168,9 @@ var term = $('#term').terminal(function(command, term) {
         //});
     } else if (command.match(/^\s*details\s*$/)) {
         helpDetails();
+    } else if (command.match(/^\s*banner\s*$/)) {
+        term.clear();
+        term.greetings();
     } else if (command !== '') {
         term.error('unkown command, try:');
         help();
@@ -191,13 +194,15 @@ var term = $('#term').terminal(function(command, term) {
         "get",
         "check",
         "select",
+        "file",
         "upload",
         "download",
         "flash",
         "reset",
-        "file",
         "details",
         "setup",
+        "clear",
+        "banner",
         "exit"
     ],
     prompt: 'dc-hdmi> ',
@@ -233,9 +238,9 @@ function helpDetails() {
     var msg = "";
     msg = "[[b;#fff;]Firmware upgrade procedure:]\n"
         + "  ________          ___________         _________\n"
-        + " /        \\        /           \\       /         \\\n"
-        + " | jQuery |        |  esp-12e  |       |  FPGA   |\n"
-        + " |  Term  | upload |  staging  | flash |  flash  |\n"
+        + " /        \\        /           \\ flash /         \\\n"
+        + " | jQuery |        |  esp-12e  |------>|  FPGA   |\n"
+        + " |  Term  | upload |  staging  | reset |  flash  |\n"
         + " | (this) |------->|   flash   |------>|  (SPI)  |\n"
         + " \\________/        \\___________/       \\_________/\n"
         + "   |   /|\\              /|\\\n"
@@ -263,6 +268,8 @@ function help(full) {
             + "to the FPGA configuration memory. It's possible to re-flash\n"
             + "the firmware from the staging area at any time, because it's\n"
             + "stored in the flash of the WiFi chip.\n"
+            + "Then type [[b;#fff;]reset] to reset the FPGA and read the\n"
+            + "previously flashed firmware.\n"
             + " \n"
             + "Type [[b;#fff;]details] to show a diagram of the upgrade procedure.\n"
             + " \n";
@@ -276,9 +283,9 @@ function help(full) {
     msg += "[[b;#fff;]download]: download latest flash file from dc.i74.de\n";
     msg += "[[b;#fff;]flash]:    flash FPGA from staging area\n";
     msg += "[[b;#fff;]reset]:    reset FPGA\n";
-    msg += "[[b;#fff;]clear]:    clear terminal screen\n";
-    msg += "[[b;#fff;]setup]:    enter setup mode\n";
     msg += "[[b;#fff;]details]:  show firmware upgrade procedure\n";
+    msg += "[[b;#fff;]setup]:    enter setup mode\n";
+    msg += "[[b;#fff;]clear]:    clear terminal screen\n";
     msg += "[[b;#fff;]exit]:     end terminal\n";
 
     typed_message(term, msg, 1);
