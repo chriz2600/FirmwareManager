@@ -357,18 +357,17 @@ function setupDataDisplayToString() {
 }
 
 function setupMode() {
-    var hint = "(leave blank to skip, enter space to set empty)";
     var history = term.history();
     history.disable();
 
     var questions = [
         {
-            q : 'WiFi SSID? ' + hint + ' ', cb: function(value) {
+            q : 'WiFi SSID? ', cb: function(value) {
                 setupData.ssid = value;
             }
         },
         {
-            q : 'WiFi Password? ' + hint + ' ', cb: function(value) {
+            q : 'WiFi Password? ', cb: function(value) {
                 setupData.password = value;
             }
         },
@@ -381,10 +380,13 @@ function setupMode() {
                 return true;
             },
             q : function() {
-                return setupDataDisplayToString(setupData) + ' \nSave changes? ';
+                return " \n-- Changes to save: ---------------------------------"
+                    + setupDataDisplayToString(setupData)
+                    + "-----------------------------------------------------"
+                    + ' \nSave changes (y)es/(n)o? ';
             },
             cb: function(value) {
-                if (value.match(/^y|yes$/)) {
+                if (value.match(/^(y|yes)$/)) {
                     // start saving transaction
                     startTransaction("saving setup...", function() {
                         setTimeout(function() {
@@ -426,6 +428,10 @@ function setupMode() {
         }
     }
 
+    term.echo(" \n[[b;#fff;]This will guide you through the setup process:]\n"
+        + "- Just hit return to leave the value unchanged.\n"
+        + "- Enter a single space to reset value to firmware default.\n"
+    );
     next();
 }
 
