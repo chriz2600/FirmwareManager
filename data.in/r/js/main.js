@@ -166,6 +166,8 @@ var term = $('#term').terminal(function(command, term) {
         //startTransaction(null, function() {
             setupMode();
         //});
+    } else if (command.match(/^\s*details\s*$/)) {
+        helpDetails();
     } else if (command !== '') {
         term.error('unkown command, try:');
         help();
@@ -194,6 +196,7 @@ var term = $('#term').terminal(function(command, term) {
         "flash",
         "reset",
         "file",
+        "details",
         "setup",
         "exit"
     ],
@@ -226,6 +229,25 @@ function set_size() {
     tv[0].style.setProperty("--height", height);
 }
 
+function helpDetails() {
+    var msg = "";
+    msg = "[[b;#fff;]Firmware upgrade procedure:]\n"
+        + "  ________          ___________         _________\n"
+        + " /        \\        /           \\       /         \\\n"
+        + " | jQuery |        |  esp-12e  |       |  FPGA   |\n"
+        + " |  Term  | upload |  staging  | flash |  flash  |\n"
+        + " | (this) |------->|   flash   |------>|  (SPI)  |\n"
+        + " \\________/        \\___________/       \\_________/\n"
+        + "   |   /|\\              /|\\\n"
+        + "   |    |       download |\n"
+        + "  \\|/   |           _____|_____\n"
+        + "   select          /           \\\n"
+        + "   (from           | dc.i74.de |\n"
+        + "     HD)           \\___________/\n"
+        + " \n";
+    typed_message(term, msg, 1);
+}
+
 function help(full) {
     var msg = "";
     if (full) {
@@ -241,8 +263,11 @@ function help(full) {
             + "to the FPGA configuration memory. It's possible to re-flash\n"
             + "the firmware from the staging area at any time, because it's\n"
             + "stored in the flash of the WiFi chip.\n"
+            + " \n"
+            + "Type [[b;#fff;]details] to show a diagram of the upgrade procedure.\n"
             + " \n";
     }
+    msg += "Commands:\n";
     msg += "[[b;#fff;]get]:      get checksum of installed firmware\n";
     msg += "[[b;#fff;]check]:    check if new firmware is available\n";
     msg += "[[b;#fff;]select]:   select file to upload\n";
@@ -253,6 +278,7 @@ function help(full) {
     msg += "[[b;#fff;]reset]:    reset FPGA\n";
     msg += "[[b;#fff;]clear]:    clear terminal screen\n";
     msg += "[[b;#fff;]setup]:    enter setup mode\n";
+    msg += "[[b;#fff;]details]:  show firmware upgrade procedure\n";
     msg += "[[b;#fff;]exit]:     end terminal\n";
 
     typed_message(term, msg, 1);
