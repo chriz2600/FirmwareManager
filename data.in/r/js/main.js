@@ -259,17 +259,17 @@ function help(full) {
         msg = " \n"
             + "To [[b;#fff;]flash] the firmware, you have 2 options:\n"
             + " \n"
-            + "1) [[b;#fff;]select] a firmware from your harddisk\n"
-            + "   and [[b;#fff;]upload] it to the staging area\n"
-            + "2) [[b;#fff;]download] the latest firmware from dc.i74.de\n"
+            + "1) [[b;#fff;]select] a firmware from your harddisk and [[b;#fff;]upload] it\n"
             + "   to the staging area\n"
+            + "2) [[b;#fff;]download] the latest firmware from dc.i74.de to the\n"
+            + "   staging area\n"
             + " \n"
-            + "After that, you are ready to [[b;#fff;]flash] the firmware\n"
-            + "to the FPGA configuration memory. It's possible to re-flash\n"
-            + "the firmware from the staging area at any time, because it's\n"
-            + "stored in the flash of the WiFi chip.\n"
-            + "Then type [[b;#fff;]reset] to reset the FPGA and read the\n"
-            + "previously flashed firmware.\n"
+            + "After that, you are ready to [[b;#fff;]flash] the firmware to\n"
+            + "the FPGA configuration memory. It's possible to re-flash\n"
+            + "the firmware from the staging area at any time, because\n"
+            + "it's stored in the flash of the WiFi chip.\n"
+            + "Then type [[b;#fff;]reset] to reset the FPGA and load the previously\n"
+            + "flashed firmware.\n"
             + " \n"
             + "Type [[b;#fff;]details] to show a diagram of the upgrade procedure.\n"
             + " \n";
@@ -364,9 +364,7 @@ function setupDataDisplayToString() {
 }
 
 function setupMode() {
-    var history = term.history();
-    history.disable();
-
+    term.history().disable();
     var questions = [
         {
             q : 'WiFi SSID? ', cb: function(value) {
@@ -428,10 +426,12 @@ function setupMode() {
                     prompt: typeof(n.q) == "function" ? n.q() : n.q
                 });
             } else {
-                history.enable();
+                console.log("HERE1");
+                term.history().enable();
             }
         } else {
-            history.enable();
+            console.log("HERE2");
+            term.history().enable();
         }
     }
 
