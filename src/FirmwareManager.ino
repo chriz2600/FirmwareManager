@@ -11,6 +11,8 @@
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <SPIFlash.h>
+#include "AsyncJson.h"
+#include "ArduinoJson.h"
 
 #define CS 16
 #define NCONFIG 5
@@ -23,8 +25,8 @@
 
 char ssid[64];
 char password[64];
+char otaPassword[64]; 
 char firmwareUrl[1024] = FIRMWARE_URL;
-char otaPassword[64] = "testtest"; 
 char httpAuthUser[64] = "Test";
 char httpAuthPass[64] = "testtest";
 const char* host = "dc-firmware-manager";
@@ -311,10 +313,7 @@ void setupArduinoOTA() {
     
     ArduinoOTA.setPort(8266);
     ArduinoOTA.setHostname(host);
-
-    if (strlen(otaPassword)) {
-        ArduinoOTA.setPassword(otaPassword);
-    }
+    ArduinoOTA.setPassword(otaPassword);
     
     ArduinoOTA.onStart([]() {
         DBG_OUTPUT_PORT.println("ArduinoOTA >> Start");
@@ -408,6 +407,10 @@ void writeSetupParameter(AsyncWebServerRequest *request, const char* param, char
     }
 }
 
+String jsonSafe(const char* in) {
+
+}
+
 void setupHTTPServer() {
     DBG_OUTPUT_PORT.printf(">> Setting up HTTP server...\n");
 
@@ -485,10 +488,31 @@ void setupHTTPServer() {
         request->send(200, "text/plain", "OK\n");
     });
     
+    server.on("/config", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        
+        AsyncResponseStream *response = request->beginResponseStream("text/json");
+        DynamicJsonBuffer jsonBuffer;
+        JsonObject &root = jsonBuffer.createObject();
+
+        root["ssid"] = ssid;
+        root["password"] = password;
+        root["ota_pass"] = otaPassword;
+        root["firmware_url"] = firmwareUrl;
+        root["http_auth_user"] = httpAuthUser;
+        root["http_auth_pass"] = httpAuthPass;
+        
+        root.printTo(*response);
+        request->send(response);
+    });
+
     server.on("/restart", HTTP_ANY, [](AsyncWebServerRequest *request) {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
+        ESP.eraseConfig();
         ESP.restart();
     });
     
@@ -528,8 +552,7 @@ void setup(void) {
     setupWiFi();
     setupHTTPServer();
     
-    if (DEBUG 
-     || strlen(otaPassword)) 
+    if (strlen(otaPassword)) 
     {
         setupArduinoOTA();
     }

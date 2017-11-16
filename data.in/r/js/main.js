@@ -170,7 +170,13 @@ var term = $('#term').terminal(function(command, term) {
             restartESP();
         });
     } else if (command.match(/^\s*setup\s*$/)) {
-        setupMode();
+        startTransaction(null, function() {
+            getConfig(false, setupMode);
+        });
+    } else if (command.match(/^\s*config\s*$/)) {
+        startTransaction(null, function() {
+            getConfig(true);
+        });
     } else if (command.match(/^\s*details\s*$/)) {
         helpDetails();
     } else if (command.match(/^\s*banner\s*$/)) {
@@ -206,6 +212,7 @@ var term = $('#term').terminal(function(command, term) {
         "reset",
         "details",
         "setup",
+        "config",
         "clear",
         "banner",
         "restart",
@@ -291,6 +298,7 @@ function help(full) {
     msg += "[[b;#fff;]reset]:    reset FPGA\n";
     msg += "[[b;#fff;]details]:  show firmware upgrade procedure\n";
     msg += "[[b;#fff;]setup]:    enter setup mode\n";
+    msg += "[[b;#fff;]config]:   get current setup\n";
     msg += "[[b;#fff;]clear]:    clear terminal screen\n";
     msg += "[[b;#fff;]restart]:  restarts ESP module\n";
     msg += "[[b;#fff;]exit]:     end terminal\n";
@@ -356,27 +364,36 @@ function uploadFile() {
 }
 
 var setupData = {};
+var currentConfigData = {};
 var setupDataMapping = {
-    ssid: "WiFi SSID",
-    password: "WiFi Password",
-    ota_pass: "OTA Password",
-    firmware_url: "Firmware URL",
-    http_auth_user: "HTTP User",
-    http_auth_pass: "HTTP Password"
+    ssid:           [ "WiFi SSID     ", "empty" ],
+    password:       [ "WiFi Password ", "empty" ],
+    ota_pass:       [ "OTA Password  ", "empty" ],
+    firmware_url:   [ "Firmware URL  ", "http://dc.i74.de/firmware.rbf" ],
+    http_auth_user: [ "HTTP User     ", "Test" ],
+    http_auth_pass: [ "HTTP Password ", "testtest" ]
 };
 
-function setupDataDisplayToString() {
+function setupDataDisplayToString(data) {
     var value = " \n";
-    for (x in setupData) {
-        var t = setupDataMapping[x] || x;
-        value += t + ": " + (setupData[x] || '[[b;yellow;]reset]') + " \n";
+    for (x in data) {
+        var t = setupDataMapping[x][0] || x;
+        value += t + ": " + (data[x] || '[[b;yellow;]reset]') + " \n";
     }
     return value;
 }
 
 function prepareQuestion(pos, total, field) {
     return { 
-        q : pos + '/' + total + ': ' + setupDataMapping[field] + '? ', 
+        q : pos + '/' + total + ': ' + setupDataMapping[field][0] 
+        + " \n    (default: [[b;yellow;]" + setupDataMapping[field][1] + "])"
+        + " \n    (current value: " 
+        + (currentConfigData[field] 
+            ? "[[b;green;]" + currentConfigData[field] + "]"
+            : "[[b;red;]not yet set]"
+        )
+        + ")"
+        + " \n    New value? ", 
         cb: function(value) { 
             setupData[field] = value; 
         }
@@ -384,8 +401,20 @@ function prepareQuestion(pos, total, field) {
 }
 
 function restartESP() {
-    $.ajax("/restart").always(function (data) {
-        endTransaction('ESP module restarted.');
+    $.ajax("/restart");
+    endTransaction('ESP module restarted.');
+}
+
+function getConfig(show, cb) {
+    $.ajax("/config").done(function (data) {
+        currentConfigData = data;
+        endTransaction(
+            show ? " \n-- Current config: ----------------------------------"
+            + setupDataDisplayToString(currentConfigData)
+            + "-----------------------------------------------------" : ""
+        , null, cb);
+    }).fail(function() {
+        endTransaction('Error getting current config.', true);
     });
 }
 
@@ -410,7 +439,8 @@ function setupMode() {
                 return " \n-- Changes to save: ---------------------------------"
                     + setupDataDisplayToString(setupData)
                     + "-----------------------------------------------------"
-                    + ' \nAfter saving changes, this application will restart.'
+                    + ' \nAfter saving changes, you will have to'
+                    + ' \nrestart this application by typing: [[b;#fff;]restart].'
                     + ' \nSave changes (y)es/(n)o? ';
             },
             cb: function(value) {
@@ -476,7 +506,9 @@ function checkSetupStatus() {
         if (setupStatus === "false") {
             endTransaction();
         } else {
-            endTransaction(null, null, setupMode);
+            endTransaction(null, null, function() { 
+                getConfig(false, setupMode); 
+            });
         }
     }).fail(function() {
         endTransaction("Error checking setup status!", true);
