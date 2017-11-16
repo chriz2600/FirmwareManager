@@ -393,6 +393,21 @@ void setupWiFi() {
     }
 }
 
+void writeSetupParameter(AsyncWebServerRequest *request, const char* param, char* target, uint8_t maxlen, const char* filename) {
+    if(request->hasParam(param, true)) {
+        AsyncWebParameter *p = request->getParam(param, true);
+        if (p->value() == "") {
+            DBG_OUTPUT_PORT.printf("SPIFFS.remove: %s\n", filename);
+            SPIFFS.remove(filename);
+        } else {
+            snprintf(target, maxlen, "%s", p->value().c_str());
+            _writeFile(filename, target, maxlen);
+        }
+    } else {
+        DBG_OUTPUT_PORT.printf("no such param: %s\n", param);
+    }
+}
+
 void setupHTTPServer() {
     DBG_OUTPUT_PORT.printf(">> Setting up HTTP server...\n");
 
@@ -456,6 +471,27 @@ void setupHTTPServer() {
         request->send(200, "text/plain", inInitialSetupMode ? "true\n" : "false\n");
     });
 
+    server.on("/setup", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        writeSetupParameter(request, "ssid", ssid, 64, "/etc/ssid");
+        writeSetupParameter(request, "password", password, 64, "/etc/password");
+        writeSetupParameter(request, "ota_pass", otaPassword, 64, "/etc/ota_pass");
+        writeSetupParameter(request, "firmware_url", firmwareUrl, 1024, "/etc/firmware_url");
+        writeSetupParameter(request, "http_auth_user", httpAuthUser, 64, "/etc/http_auth_user");
+        writeSetupParameter(request, "http_auth_pass", httpAuthPass, 64, "/etc/http_auth_pass");
+
+        request->send(200, "text/plain", "OK\n");
+    });
+    
+    server.on("/restart", HTTP_ANY, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        ESP.restart();
+    });
+    
     AsyncStaticWebHandler* handler = &server
         .serveStatic("/", SPIFFS, "/")
         .setDefaultFile("index.html");

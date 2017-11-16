@@ -82,7 +82,7 @@ function startTransaction(msg, action) {
     }
 }
 
-function endTransaction(msg, iserror) {
+function endTransaction(msg, iserror, cb) {
     (function wait() {
         if (finish) {
             if (msg) {
@@ -102,6 +102,9 @@ function endTransaction(msg, iserror) {
             term.set_prompt('dc-hdmi> ');
             $('#term').scrollTop($('#term').prop('scrollHeight'));
             waiting = false;
+            if (typeof(cb) == "function") {
+                cb();
+            }
         } else {
             setTimeout(wait, 350);
         }
@@ -162,10 +165,12 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             getFirmwareData();
         });
+    } else if (command.match(/^\s*restart\s*$/)) {
+        startTransaction(null, function() {
+            restartESP();
+        });
     } else if (command.match(/^\s*setup\s*$/)) {
-        //startTransaction(null, function() {
-            setupMode();
-        //});
+        setupMode();
     } else if (command.match(/^\s*details\s*$/)) {
         helpDetails();
     } else if (command.match(/^\s*banner\s*$/)) {
@@ -203,6 +208,7 @@ var term = $('#term').terminal(function(command, term) {
         "setup",
         "clear",
         "banner",
+        "restart",
         "exit"
     ],
     prompt: 'dc-hdmi> ',
@@ -286,6 +292,7 @@ function help(full) {
     msg += "[[b;#fff;]details]:  show firmware upgrade procedure\n";
     msg += "[[b;#fff;]setup]:    enter setup mode\n";
     msg += "[[b;#fff;]clear]:    clear terminal screen\n";
+    msg += "[[b;#fff;]restart]:  restarts ESP module\n";
     msg += "[[b;#fff;]exit]:     end terminal\n";
 
     typed_message(term, msg, 1);
@@ -351,31 +358,46 @@ function uploadFile() {
 var setupData = {};
 var setupDataMapping = {
     ssid: "WiFi SSID",
-    password : "WiFi Password"
+    password: "WiFi Password",
+    ota_pass: "OTA Password",
+    firmware_url: "Firmware URL",
+    http_auth_user: "HTTP User",
+    http_auth_pass: "HTTP Password"
 };
 
 function setupDataDisplayToString() {
     var value = " \n";
     for (x in setupData) {
         var t = setupDataMapping[x] || x;
-        value += t + ": " + setupData[x] + "\n";
+        value += t + ": " + (setupData[x] || '[[b;yellow;]reset]') + " \n";
     }
     return value;
+}
+
+function prepareQuestion(pos, total, field) {
+    return { 
+        q : pos + '/' + total + ': ' + setupDataMapping[field] + '? ', 
+        cb: function(value) { 
+            setupData[field] = value; 
+        }
+    };
+}
+
+function restartESP() {
+    $.ajax("/restart").always(function (data) {
+        endTransaction('ESP module restarted.');
+    });
 }
 
 function setupMode() {
     term.history().disable();
     var questions = [
-        {
-            q : 'WiFi SSID? ', cb: function(value) {
-                setupData.ssid = value;
-            }
-        },
-        {
-            q : 'WiFi Password? ', cb: function(value) {
-                setupData.password = value;
-            }
-        },
+        prepareQuestion(1, 6, "ssid"),
+        prepareQuestion(2, 6, "password"),
+        prepareQuestion(3, 6, "ota_pass"),
+        prepareQuestion(4, 6, "firmware_url"),
+        prepareQuestion(5, 6, "http_auth_user"),
+        prepareQuestion(6, 6, "http_auth_pass"),
         {
             pc: function() {
                 if (JSON.stringify(setupData) == JSON.stringify({})) {
@@ -388,15 +410,22 @@ function setupMode() {
                 return " \n-- Changes to save: ---------------------------------"
                     + setupDataDisplayToString(setupData)
                     + "-----------------------------------------------------"
+                    + ' \nAfter saving changes, this application will restart.'
                     + ' \nSave changes (y)es/(n)o? ';
             },
             cb: function(value) {
                 if (value.match(/^(y|yes)$/)) {
                     // start saving transaction
                     startTransaction("saving setup...", function() {
-                        setTimeout(function() {
-                            endTransaction('[[b;#fff;]Done] setup saved.\n');
-                        }, 2000);
+                        $.ajax({
+                            type: "POST",
+                            url: "/setup",
+                            data: $.param(setupData, true)
+                        }).done(function (data) {
+                            endTransaction('[[b;#fff;]Done] Setup data saved.\n');
+                        }).fail(function() {
+                            endTransaction('Error saving setup data.', true);
+                        });
                     });
                 } else {
                     term.error("discarded setup");
@@ -426,11 +455,9 @@ function setupMode() {
                     prompt: typeof(n.q) == "function" ? n.q() : n.q
                 });
             } else {
-                console.log("HERE1");
                 term.history().enable();
             }
         } else {
-            console.log("HERE2");
             term.history().enable();
         }
     }
@@ -438,6 +465,7 @@ function setupMode() {
     term.echo(" \n[[b;#fff;]This will guide you through the setup process:]\n"
         + "- Just hit return to leave the value unchanged.\n"
         + "- Enter a single space to reset value to firmware default.\n"
+        + "- CTRL-D to abort.\n"
     );
     next();
 }
@@ -448,7 +476,7 @@ function checkSetupStatus() {
         if (setupStatus === "false") {
             endTransaction();
         } else {
-
+            endTransaction(null, null, setupMode);
         }
     }).fail(function() {
         endTransaction("Error checking setup status!", true);
