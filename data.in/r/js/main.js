@@ -374,11 +374,17 @@ var setupDataMapping = {
     http_auth_pass: [ "HTTP Password ", "testtest" ]
 };
 
-function setupDataDisplayToString(data) {
+function setupDataDisplayToString(data, isSafe) {
     var value = " \n";
     for (x in data) {
         var t = setupDataMapping[x][0] || x;
-        value += t + ": " + (data[x] || '[[b;yellow;]reset]') + " \n";
+        value += t + ": " 
+            + (
+                data[x] 
+                ? ('[[b;#fff;]' + data[x] + ']')
+                : (isSafe ? '[[b;yellow;]reset]' : '[[b;red;]not yet set]')
+            )
+             + " \n";
     }
     return value;
 }
@@ -410,7 +416,7 @@ function getConfig(show, cb) {
         currentConfigData = data;
         endTransaction(
             show ? " \n-- Current config: ----------------------------------"
-            + setupDataDisplayToString(currentConfigData)
+            + setupDataDisplayToString(currentConfigData, false)
             + "-----------------------------------------------------" : ""
         , null, cb);
     }).fail(function() {
@@ -437,7 +443,7 @@ function setupMode() {
             },
             q : function() {
                 return " \n-- Changes to save: ---------------------------------"
-                    + setupDataDisplayToString(setupData)
+                    + setupDataDisplayToString(setupData, true)
                     + "-----------------------------------------------------"
                     + ' \nAfter saving changes, you will have to'
                     + ' \nrestart this application by typing: [[b;#fff;]restart].'
