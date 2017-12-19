@@ -50,6 +50,10 @@ To build index.html you need the following
 
 - [Demo][dcfwdemo]
 
+## Schematic:
+
+- **SOON**
+
 ----
 
 [dcfwdemo]: http://dc-fw-manager.i74.de/
