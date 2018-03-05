@@ -8,3 +8,6 @@ data/etc/ota_pass
 data/etc/http_auth_pass
 data/etc/http_auth_user
 notes.txt
+.vscode/launch.json
+.vscode/*.db
+misc/test.html
