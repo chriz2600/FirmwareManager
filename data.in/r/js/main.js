@@ -143,7 +143,7 @@ var term = $('#term').terminal(function(command, term) {
         });
     } else if (command.match(/^\s*download\s*$/)) {
         startTransaction(null, function() {
-            downloadFile();
+            getConfig(false, downloadFile);
         });
     } else if (command.match(/^\s*flash\s*$/)) {
         startTransaction(null, function() {
@@ -159,11 +159,11 @@ var term = $('#term').terminal(function(command, term) {
         });
     } else if (command.match(/^\s*get\s*$/)) {
         startTransaction(null, function() {
-            getFirmwareData();
+            getConfig(false, getFirmwareData);
         });
     } else if (command.match(/^\s*check\s*$/)) {
         startTransaction(null, function() {
-            getFirmwareData();
+            getConfig(false, getFirmwareData);
         });
     } else if (command.match(/^\s*restart\s*$/)) {
         startTransaction(null, function() {
@@ -366,12 +366,15 @@ function uploadFile() {
 var setupData = {};
 var currentConfigData = {};
 var setupDataMapping = {
-    ssid:           [ "WiFi SSID     ", "empty" ],
-    password:       [ "WiFi Password ", "empty" ],
-    ota_pass:       [ "OTA Password  ", "empty" ],
-    firmware_url:   [ "Firmware URL  ", "http://dc.i74.de/firmware.rbf" ],
-    http_auth_user: [ "HTTP User     ", "Test" ],
-    http_auth_pass: [ "HTTP Password ", "testtest" ]
+    ssid:             [ "WiFi SSID        ", "empty" ],
+    password:         [ "WiFi Password    ", "empty" ],
+    ota_pass:         [ "OTA Password     ", "empty" ],
+    firmware_server:  [ "Firmware Server  ", "dc.i74.de" ],
+    firmware_version: [ "Firmware Version ", "master" ],
+    firmware_fpga:    [ "Firmware FPGA    ", "10CL025" ],
+    firmware_format:  [ "Firmware Format  ", "VGA" ],
+    http_auth_user:   [ "HTTP User        ", "Test" ],
+    http_auth_pass:   [ "HTTP Password    ", "testtest" ]
 };
 
 function setupDataDisplayToString(data, isSafe) {
@@ -427,12 +430,6 @@ function getConfig(show, cb) {
 function setupMode() {
     term.history().disable();
     var questions = [
-        prepareQuestion(1, 6, "ssid"),
-        prepareQuestion(2, 6, "password"),
-        prepareQuestion(3, 6, "ota_pass"),
-        prepareQuestion(4, 6, "firmware_url"),
-        prepareQuestion(5, 6, "http_auth_user"),
-        prepareQuestion(6, 6, "http_auth_pass"),
         {
             pc: function() {
                 if (JSON.stringify(setupData) == JSON.stringify({})) {
@@ -471,6 +468,11 @@ function setupMode() {
             }
         }
     ];
+    var keyz = Object.keys(setupDataMapping);
+    var size = keyz.length;
+    for (var i = size - 1 ; i >= 0 ; i--) {
+        questions.unshift(prepareQuestion(i + 1, size, keyz[i]));
+    }
     var next = function() {
         var n = questions.shift();
         var v;
@@ -521,12 +523,22 @@ function checkSetupStatus() {
     });
 }
 
+function _getMD5File() {
+    return (
+          "//" + currentConfigData["firmware_server"]
+        + "/fw/" + currentConfigData["firmware_version"]
+        + "-" + currentConfigData["firmware_fpga"]
+        + "-" + currentConfigData["firmware_format"]
+        + "rbf.md5"
+    );
+}
+
 function getFirmwareData() {
     $.ajax("/etc/last_flash_md5").done(function (data) {
         var lastFlashMd5 = $.trim(data);
         $.ajax("/firmware.rbf.md5").done(function (data) {
             var stagedMd5 = $.trim(data);
-            $.ajax("http://dc.i74.de/firmware.rbf.md5").done(function (data) {
+            $.ajax(_getMD5File()).done(function (data) {
                 var origMd5 = $.trim(data);
                 endTransaction(
                     'Installed firmware:\n'
@@ -554,7 +566,7 @@ function getFirmwareData() {
 function checkFirmware() {
     $.ajax("/etc/last_flash_md5").done(function (data) {
         var lastFlashMd5 = $.trim(data);
-        $.ajax("http://dc.i74.de/firmware.rbf.md5").done(function (data) {
+        $.ajax(_getMD5File()).done(function (data) {
             var origMd5 = $.trim(data);
             if (lastFlashMd5 == origMd5) {
                 endTransaction('Currently installed firmware is already the latest version.');
@@ -588,7 +600,7 @@ function downloadFile() {
                 if (pgrs == "100") {
                     $.ajax("/firmware.rbf.md5").done(function (data) {
                         var calcMd5 = $.trim(data);
-                        $.ajax("http://dc.i74.de/firmware.rbf.md5").done(function (data) {
+                        $.ajax(_getMD5File()).done(function (data) {
                             var origMd5 = $.trim(data);
                             endTransactionWithMD5Check(calcMd5, origMd5, "Please try to re-download file.");
                         }).fail(function() {

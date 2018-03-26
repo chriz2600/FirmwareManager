@@ -11,3 +11,4 @@ notes.txt
 .vscode/launch.json
 .vscode/*.db
 misc/test.html
+.vscode/.browse.c_cpp.db*

@@ -21,7 +21,7 @@
     get("ssid", "");
     get("password", "");
     get("ota_pass", "");
-    get("firmware_url", "http://dc.i74.de/firmware.rbf");
+    get("firmware_server", "dc.i74.de");
     get("http_auth_user", "Test");
     get("http_auth_pass", "testtest");
     

@@ -18,7 +18,8 @@
 #define NCONFIG 5
 #define DBG_OUTPUT_PORT Serial
 #define FIRMWARE_FILE "/firmware.rbf"
-#define FIRMWARE_URL "http://dc.i74.de/firmware.rbf"
+
+// firmware_server
 
 #define PAGES 8192 // 8192 pages x 256 bytes = 2MB = 16MBit
 #define DEBUG true
@@ -26,7 +27,10 @@
 char ssid[64];
 char password[64];
 char otaPassword[64]; 
-char firmwareUrl[1024] = FIRMWARE_URL;
+char firmwareServer[1024] = "dc.i74.de";
+char firmwareVersion[64] = "master";
+char firmwareFPGA[64] = "10CL025";
+char firmwareFormat[64] = "VGA";
 char httpAuthUser[64] = "Test";
 char httpAuthPass[64] = "testtest";
 const char* host = "dc-firmware-manager";
@@ -73,21 +77,28 @@ void _readFile(const char *filename, char *target, unsigned int len) {
 
 void setupCredentials(void) {
     DBG_OUTPUT_PORT.printf(">> Reading stored values...\n");
+
     _readFile("/etc/ssid", ssid, 64);
     _readFile("/etc/password", password, 64);
     _readFile("/etc/ota_pass", otaPassword, 64);
-    _readFile("/etc/firmware_url", firmwareUrl, 1024);
+    _readFile("/etc/firmware_server", firmwareServer, 1024);
+    _readFile("/etc/firmware_version", firmwareVersion, 64);
+    _readFile("/etc/firmware_fpga", firmwareFPGA, 64);
+    _readFile("/etc/firmware_format", firmwareFormat, 64);
     _readFile("/etc/http_auth_user", httpAuthUser, 64);
     _readFile("/etc/http_auth_pass", httpAuthPass, 64);
 
     if (DEBUG) {
         DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
-        DBG_OUTPUT_PORT.printf("| /etc/ssid           -> ssid:         [%s]\n", ssid);
-        DBG_OUTPUT_PORT.printf("| /etc/password       -> password:     [%s]\n", password);
-        DBG_OUTPUT_PORT.printf("| /etc/ota_pass       -> ota_pass:     [%s]\n", otaPassword);
-        DBG_OUTPUT_PORT.printf("| /etc/firmware_url   -> firmwareUrl:  [%s]\n", firmwareUrl);
-        DBG_OUTPUT_PORT.printf("| /etc/http_auth_user -> httpAuthUser: [%s]\n", httpAuthUser);
-        DBG_OUTPUT_PORT.printf("| /etc/http_auth_pass -> httpAuthPass: [%s]\n", httpAuthPass);
+        DBG_OUTPUT_PORT.printf("| /etc/ssid             -> ssid:            [%s]\n", ssid);
+        DBG_OUTPUT_PORT.printf("| /etc/password         -> password:        [%s]\n", password);
+        DBG_OUTPUT_PORT.printf("| /etc/ota_pass         -> otaPassword:     [%s]\n", otaPassword);
+        DBG_OUTPUT_PORT.printf("| /etc/firmware_server  -> firmwareServer:  [%s]\n", firmwareServer);
+        DBG_OUTPUT_PORT.printf("| /etc/firmware_version -> firmwareVersion: [%s]\n", firmwareVersion);
+        DBG_OUTPUT_PORT.printf("| /etc/firmware_fpga    -> firmwareFPGA:    [%s]\n", firmwareFPGA);
+        DBG_OUTPUT_PORT.printf("| /etc/firmware_format  -> firmwareFormat:  [%s]\n", firmwareFormat);
+        DBG_OUTPUT_PORT.printf("| /etc/http_auth_user   -> httpAuthUser:    [%s]\n", httpAuthUser);
+        DBG_OUTPUT_PORT.printf("| /etc/http_auth_pass   -> httpAuthPass:    [%s]\n", httpAuthPass);
         DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
     }
 }
@@ -291,11 +302,13 @@ void handleDownload(AsyncWebServerRequest *request) {
         
             //send the request
             DBG_OUTPUT_PORT.println("Requesting firmware...");
-            client->write("GET /firmware.rbf HTTP/1.0\r\nHost: dc.i74.de\r\n\r\n");
+
+            String httpGet = "GET /fw/" + String(firmwareVersion) + "/DCxPlus-" + String(firmwareFPGA) + "-" + String(firmwareFormat) + ".rbf HTTP/1.0\r\nHost: dc.i74.de\r\n\r\n";
+            client->write(httpGet.c_str());
         }, NULL);
 
         DBG_OUTPUT_PORT.println("Trying to connect");
-        if (!aClient->connect("dc.i74.de", 80)) {
+        if (!aClient->connect(firmwareServer, 80)) {
             DBG_OUTPUT_PORT.println("Connect Fail");
             AsyncClient *client = aClient;
             aClient = NULL;
@@ -392,8 +405,9 @@ void setupWiFi() {
     }
 }
 
-void writeSetupParameter(AsyncWebServerRequest *request, const char* param, char* target, uint8_t maxlen, const char* filename) {
+void writeSetupParameter(AsyncWebServerRequest *request, const char* param, char* target, unsigned int maxlen) {
     if(request->hasParam(param, true)) {
+        const char* filename = ("/etc/" + String(param)).c_str();
         AsyncWebParameter *p = request->getParam(param, true);
         if (p->value() == "") {
             DBG_OUTPUT_PORT.printf("SPIFFS.remove: %s\n", filename);
@@ -478,12 +492,15 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        writeSetupParameter(request, "ssid", ssid, 64, "/etc/ssid");
-        writeSetupParameter(request, "password", password, 64, "/etc/password");
-        writeSetupParameter(request, "ota_pass", otaPassword, 64, "/etc/ota_pass");
-        writeSetupParameter(request, "firmware_url", firmwareUrl, 1024, "/etc/firmware_url");
-        writeSetupParameter(request, "http_auth_user", httpAuthUser, 64, "/etc/http_auth_user");
-        writeSetupParameter(request, "http_auth_pass", httpAuthPass, 64, "/etc/http_auth_pass");
+        writeSetupParameter(request, "ssid", ssid, 64);
+        writeSetupParameter(request, "password", password, 64);
+        writeSetupParameter(request, "ota_pass", otaPassword, 64);
+        writeSetupParameter(request, "firmware_server", firmwareServer, 1024);
+        writeSetupParameter(request, "firmware_version", firmwareVersion, 64);
+        writeSetupParameter(request, "firmware_fpga", firmwareFPGA, 64);
+        writeSetupParameter(request, "firmware_format", firmwareFormat, 64);
+        writeSetupParameter(request, "http_auth_user", httpAuthUser, 64);
+        writeSetupParameter(request, "http_auth_pass", httpAuthPass, 64);
 
         request->send(200, "text/plain", "OK\n");
     });
@@ -500,7 +517,10 @@ void setupHTTPServer() {
         root["ssid"] = ssid;
         root["password"] = password;
         root["ota_pass"] = otaPassword;
-        root["firmware_url"] = firmwareUrl;
+        root["firmware_server"] = firmwareServer;
+        root["firmware_version"] = firmwareVersion;
+        root["firmware_fpga"] = firmwareFPGA;
+        root["firmware_format"] = firmwareFormat;
         root["http_auth_user"] = httpAuthUser;
         root["http_auth_pass"] = httpAuthPass;
         

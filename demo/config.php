@@ -6,7 +6,7 @@
     header('Content-Type: text/json');
 
     if (!$_SESSION["config"]) {
-        $_SESSION["config"] = '{"ssid":"SomeSSID","password":"SomePassword","ota_pass":"SomeOTAPassword","firmware_url":"http://dc.i74.de/firmware.rbf","http_auth_user":"Test","http_auth_pass":"testtest"}';
+        $_SESSION["config"] = '{"ssid":"SomeSSID","password":"SomePassword","ota_pass":"SomeOTAPassword","firmware_server":"dc.i74.de","http_auth_user":"Test","http_auth_pass":"testtest"}';
     } else {
         error_log("c---> " . $_SESSION["config"]);
     }
