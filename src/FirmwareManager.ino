@@ -407,7 +407,8 @@ void setupWiFi() {
 
 void writeSetupParameter(AsyncWebServerRequest *request, const char* param, char* target, unsigned int maxlen) {
     if(request->hasParam(param, true)) {
-        const char* filename = ("/etc/" + String(param)).c_str();
+        String _tmp = "/etc/" + String(param);
+        const char* filename = _tmp.c_str();
         AsyncWebParameter *p = request->getParam(param, true);
         if (p->value() == "") {
             DBG_OUTPUT_PORT.printf("SPIFFS.remove: %s\n", filename);
@@ -535,7 +536,7 @@ void setupHTTPServer() {
         ESP.eraseConfig();
         ESP.restart();
     });
-    
+
     AsyncStaticWebHandler* handler = &server
         .serveStatic("/", SPIFFS, "/")
         .setDefaultFile("index.html");
