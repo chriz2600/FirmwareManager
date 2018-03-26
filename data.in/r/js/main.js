@@ -527,9 +527,9 @@ function _getMD5File() {
     return (
           "//" + currentConfigData["firmware_server"]
         + "/fw/" + currentConfigData["firmware_version"]
-        + "-" + currentConfigData["firmware_fpga"]
+        + "/DCxPlus-" + currentConfigData["firmware_fpga"]
         + "-" + currentConfigData["firmware_format"]
-        + "rbf.md5"
+        + ".rbf.md5"
     );
 }
 
@@ -542,9 +542,9 @@ function getFirmwareData() {
                 var origMd5 = $.trim(data);
                 endTransaction(
                     'Installed firmware:\n'
-                  + ' MD5: [[b;#fff;]' + lastFlashMd5 + ']\n'
+                  + ' MD5: ' + (lastFlashMd5 == "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" ? "[[b;yellow;]No previously flashed firmware found]" : '[[b;#fff;]' + lastFlashMd5 + ']') + '\n'
                   + 'Staged firmware:\n'
-                  + ' MD5: [[b;#fff;]' + stagedMd5 + ']\n'
+                  + ' MD5: ' + (stagedMd5 == "00000000000000000000000000000000" ? "[[b;yellow;]No staged firmware found]" : '[[b;#fff;]' + stagedMd5 + ']') + '\n'
                   + 'Official firmware:\n'
                   + ' MD5: [[b;#fff;]' + origMd5 + ']\n'
                   + '\n'
