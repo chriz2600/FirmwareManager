@@ -4,9 +4,20 @@ firmware:
   script:
     - "pio run"
     - "pio run -t buildfs"
+    - "mkdir -p /srv/esp/${CI_COMMIT_REF_NAME}"
+    - "chmod 777 /srv/esp/${CI_COMMIT_REF_NAME}"
+    - "mv .pioenvs/esp12e/*.bin /srv/esp/${CI_COMMIT_REF_NAME}"
   artifacts:
     paths:
     - .pioenvs/esp12e/firmware.bin
     - .pioenvs/esp12e/spiffs.bin
   tags:
     - platformio
+
+# publish:
+#   stage: deploy
+#   script: create-index-html-esp
+#   artifacts:
+#     expire_in: 1 sec
+#   tags:
+#     - index-gen
