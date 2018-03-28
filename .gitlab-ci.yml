@@ -1,0 +1,12 @@
+
+firmware:
+  stage: build
+  script:
+    - "pio run"
+    - "pio run -t buildfs"
+  artifacts:
+    paths:
+    - .pioenvs/esp12e/firmware.bin
+    - .pioenvs/esp12e/spiffs.bin
+  tags:
+    - platformio
