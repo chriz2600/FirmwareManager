@@ -145,6 +145,10 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             getConfig(false, downloadFile);
         });
+    /*} else if (command.match(/^\s*secureflash\s*$/)) {
+        startTransaction(null, function() {
+            flash(true);
+        });*/
     } else if (command.match(/^\s*flash\s*$/)) {
         startTransaction(null, function() {
             flash();
@@ -209,6 +213,7 @@ var term = $('#term').terminal(function(command, term) {
         "upload",
         "download",
         "flash",
+        /*"secureflash",*/
         "reset",
         "details",
         "setup",
@@ -288,20 +293,21 @@ function help(full) {
             + " \n";
     }
     msg += "Commands:\n";
-    msg += "[[b;#fff;]get]:      get checksum of installed firmware\n";
-    msg += "[[b;#fff;]check]:    check if new firmware is available\n";
-    msg += "[[b;#fff;]select]:   select file to upload\n";
-    msg += "[[b;#fff;]file]:     show information on selected file\n";
-    msg += "[[b;#fff;]upload]:   upload selected file\n";
-    msg += "[[b;#fff;]download]: download latest flash file from dc.i74.de\n";
-    msg += "[[b;#fff;]flash]:    flash FPGA from staging area\n";
-    msg += "[[b;#fff;]reset]:    reset FPGA\n";
-    msg += "[[b;#fff;]details]:  show firmware upgrade procedure\n";
-    msg += "[[b;#fff;]setup]:    enter setup mode\n";
-    msg += "[[b;#fff;]config]:   get current setup\n";
-    msg += "[[b;#fff;]clear]:    clear terminal screen\n";
-    msg += "[[b;#fff;]restart]:  restarts ESP module\n";
-    msg += "[[b;#fff;]exit]:     end terminal\n";
+    msg += "[[b;#fff;]get]:         get checksum of installed firmware\n";
+    msg += "[[b;#fff;]check]:       check if new firmware is available\n";
+    msg += "[[b;#fff;]select]:      select file to upload\n";
+    msg += "[[b;#fff;]file]:        show information on selected file\n";
+    msg += "[[b;#fff;]upload]:      upload selected file\n";
+    msg += "[[b;#fff;]download]:    download latest flash file from dc.i74.de\n";
+    msg += "[[b;#fff;]flash]:       flash FPGA from staging area\n";
+    /*msg += "[[b;#fff;]secureflash]: flash FPGA from staging area, while disabling fpga\n";*/
+    msg += "[[b;#fff;]reset]:       reset FPGA\n";
+    msg += "[[b;#fff;]details]:     show firmware upgrade procedure\n";
+    msg += "[[b;#fff;]setup]:       enter setup mode\n";
+    msg += "[[b;#fff;]config]:      get current setup\n";
+    msg += "[[b;#fff;]clear]:       clear terminal screen\n";
+    msg += "[[b;#fff;]restart]:     restarts ESP module\n";
+    msg += "[[b;#fff;]exit]:        end terminal\n";
 
     typed_message(term, msg, 1);
 }
@@ -321,7 +327,7 @@ function progress(percent, width) {
     return '[' + taken + left + '] ' + percent + '%';
 }
 
-function uploadFile() {
+function uploadFile(isRetry) {
     var file = $("#fileInput").get(0).files[0];
     if (!file) {
         endTransaction("No file selected!", true);
@@ -333,7 +339,11 @@ function uploadFile() {
     formData.append("file", file);
 
     client.onerror = function(e) {
-        endTransaction("Error during upload!", true);
+        if (isRetry) {
+            endTransaction("Error during upload!", true);
+        } else {
+            uploadFile(true);
+        }
     };
 
     client.onload = function(e) {
@@ -529,7 +539,7 @@ function _getMD5File() {
         + "/fw/" + currentConfigData["firmware_version"]
         + "/DCxPlus-" + currentConfigData["firmware_fpga"]
         + "-" + currentConfigData["firmware_format"]
-        + ".rbf.md5"
+        + ".rbf.md5?cc=" + Math.random()
     );
 }
 
@@ -622,7 +632,40 @@ function downloadFile() {
     });
 }
 
-function flash() {
+function flash(secure) {
+    //startSpinner(term, spinners["shark"]);
+    term.set_prompt(progress(0, progressSize));
+    $.ajax(secure ? "/secureflash" : "/flash").done(function (data) {
+        function progressPoll() {
+            $.ajax("/progress").done(function (data) {
+                var pgrs = $.trim(data);
+                term.set_prompt(progress(pgrs, progressSize));
+                if (pgrs == "100") {
+                    $.ajax("/firmware.rbf.md5").done(function (data) {
+                        var calcMd5 = $.trim(data);
+                        $.ajax("/etc/last_flash_md5").done(function (data) {
+                            var lastFlashMd5 = $.trim(data);
+                            endTransactionWithMD5Check(calcMd5, lastFlashMd5, "Please try to re-flash.");
+                        }).fail(function() {
+                            endTransaction('Error reading checksum', true);
+                        });
+                    }).fail(function() {
+                        endTransaction('Error reading checksum', true);
+                    });
+                } else {
+                    setTimeout(progressPoll, 1500);
+                }
+            }).fail(function () {
+                endTransaction('Error reading progress', true);
+            })
+        };
+        setTimeout(progressPoll, 1500);
+    }).fail(function() {
+        endTransaction("Error starting flash process!", true);
+    });
+}
+
+/*function flash(secure) {
     term.set_prompt(progress(0, progressSize));
 
     var client = new XMLHttpRequest();
@@ -637,7 +680,7 @@ function flash() {
             var calcMd5 = $.trim(data);
             $.ajax("/etc/last_flash_md5").done(function (data) {
                 var lastFlashMd5 = $.trim(data);
-                endTransactionWithMD5Check(calcMd5, lastFlashMd5, "Please try to re-flashing.");
+                endTransactionWithMD5Check(calcMd5, lastFlashMd5, "Please try to re-flash.");
             }).fail(function() {
                 endTransaction('Error reading checksum', true);
             });
@@ -660,11 +703,11 @@ function flash() {
     };
 
 
-    client.open("GET", "/flash");
+    client.open("GET", secure ? "/secureflash" : "/flash");
     client.send(null);
 
 }
-
+*/
 function endTransactionWithMD5Check(chk1, chk2, msg) {
     endTransaction(
         progress(100, progressSize) + ' [[b;green;]OK]\n'

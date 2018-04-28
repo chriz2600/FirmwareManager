@@ -1,6 +1,7 @@
 /* 
     Dreamcast Firmware Manager
 */
+#include "global.h"
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266mDNS.h>
@@ -13,16 +14,8 @@
 #include <SPIFlash.h>
 #include "AsyncJson.h"
 #include "ArduinoJson.h"
-
-#define CS 16
-#define NCONFIG 5
-#define DBG_OUTPUT_PORT Serial
-#define FIRMWARE_FILE "/firmware.rbf"
-
-// firmware_server
-
-#define PAGES 8192 // 8192 pages x 256 bytes = 2MB = 16MBit
-#define DEBUG true
+#include <Task.h>
+#include "FlashTask.h"
 
 char ssid[64];
 char password[64];
@@ -40,19 +33,34 @@ bool inInitialSetupMode = false;
 String fname;
 AsyncWebServer server(80);
 SPIFlash flash(CS);
-MD5Builder md5;
 
-/*
-    Variables needed in Callbacks
-*/
 static AsyncClient *aClient = NULL;
 File flashFile;
 bool headerFound = false;
 String header = String();
-int totalLength = -1;
-int readLength = -1;
-unsigned int page = 0;
-bool finished = false;
+
+unsigned int page;
+bool finished;
+int totalLength;
+int readLength;
+int prevPercentComplete;
+MD5Builder md5;
+TaskManager taskManager;
+TaskFlash taskFlash(1);
+
+void reverseBitOrder(uint8_t *buffer) {
+    for (int i = 0 ; i < 256 ; i++) { 
+        buffer[i] = (buffer[i] & 0xF0) >> 4 | (buffer[i] & 0x0F) << 4;
+        buffer[i] = (buffer[i] & 0xCC) >> 2 | (buffer[i] & 0x33) << 2;
+        buffer[i] = (buffer[i] & 0xAA) >> 1 | (buffer[i] & 0x55) << 1;
+    }
+}
+
+void initBuffer(uint8_t *buffer) {
+    for (int i = 0 ; i < 256 ; i++) { 
+        buffer[i] = 0xff; 
+    }
+}
 
 void _writeFile(const char *filename, const char *towrite, unsigned int len) {
     File f = SPIFFS.open(filename, "w");
@@ -124,26 +132,20 @@ void setupAPMode(void) {
     inInitialSetupMode = true;
 }
 
-void initBuffer(uint8_t *buffer) {
-    for (int i = 0 ; i < 256 ; i++) { 
-        buffer[i] = 0xff; 
-    }
-}
-
-void resetFPGAConfiguration() {
+void startFPGAConfiguration() {
     pinMode(NCONFIG, OUTPUT);
     digitalWrite(NCONFIG, LOW);
-    delay(10);
+}
+
+void endFPGAConfiguration() {
     digitalWrite(NCONFIG, HIGH);
     pinMode(NCONFIG, INPUT);    
 }
 
-void reverseBitOrder(uint8_t *buffer) {
-    for (int i = 0 ; i < 256 ; i++) { 
-        buffer[i] = (buffer[i] & 0xF0) >> 4 | (buffer[i] & 0x0F) << 4;
-        buffer[i] = (buffer[i] & 0xCC) >> 2 | (buffer[i] & 0x33) << 2;
-        buffer[i] = (buffer[i] & 0xAA) >> 1 | (buffer[i] & 0x55) << 1;
-    }
+void resetFPGAConfiguration() {
+    startFPGAConfiguration();
+    delay(1);
+    endFPGAConfiguration();
 }
 
 bool _isAuthenticated(AsyncWebServerRequest *request) {
@@ -175,14 +177,24 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
     }
 }
 
-int writeProgress(uint8_t *buffer, size_t maxLen, int read, int total) {
-    char msg[64];
-    int len;
+int writeProgress(uint8_t *buffer, size_t maxLen, int progress) {
+    char msg[5];
+    int len = 4;
+    int alen = (len > maxLen ? maxLen : len);
 
-    sprintf(msg, "%i\n", total <= 0 ? 0 : (int)(read * 100 / total));
-    len = strlen(msg);
-    memcpy(buffer, msg, (len > maxLen ? maxLen : len));
-    return len;
+    sprintf(msg, "% 3i\n", progress);
+    //len = strlen(msg);
+    memcpy(buffer, msg, alen);
+    return alen;
+}
+
+void handleFlash2(AsyncWebServerRequest *request, const char *filename) {
+    if (SPIFFS.exists(filename)) {
+        taskManager.StartTask(&taskFlash);
+        request->send(200);
+    } else {
+        request->send(404);
+    }
 }
 
 void handleFlash(AsyncWebServerRequest *request, const char *filename) {
@@ -209,7 +221,7 @@ void handleFlash(AsyncWebServerRequest *request, const char *filename) {
             int _read = 0;
             if (!flash.is_busy_async()) {
                 if ((_read = flashFile.readBytes((char *) buffer, 256)) && page < PAGES) {
-                    md5.add(buffer, _read);                
+                    md5.add(buffer, _read);
                     reverseBitOrder(buffer);
                     flash.page_write_async(page, buffer);
                     initBuffer(buffer); // cleanup buffer
@@ -224,7 +236,12 @@ void handleFlash(AsyncWebServerRequest *request, const char *filename) {
                 }
             }
             readLength = page;
-            return writeProgress(buffer, maxLen, readLength, totalLength);
+            int percentComplete = (totalLength <= 0 ? 0 : (int)(readLength * 100 / totalLength));
+            if (prevPercentComplete != percentComplete) {
+                prevPercentComplete = percentComplete;
+                DBG_OUTPUT_PORT.printf("[%i]\n", percentComplete);
+            }
+            return writeProgress(buffer, maxLen, percentComplete);
         });
 
         response->addHeader("Server", "Dreamcast HDMI");
@@ -458,7 +475,16 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
+        handleFlash2(request, FIRMWARE_FILE);
+    });
+
+    server.on("/secureflash", HTTP_GET, [](AsyncWebServerRequest *request){
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        //startFPGAConfiguration();
         handleFlash(request, FIRMWARE_FILE);
+        //endFPGAConfiguration();
     });
 
     server.on("/progress", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -560,6 +586,11 @@ void setupSPIFFS() {
     }
 }
 
+void setupTaskManager() {
+    DBG_OUTPUT_PORT.printf(">> Setting up task manager...\n");
+    taskManager.Setup();
+}
+
 void setup(void) {
 
     DBG_OUTPUT_PORT.begin(115200);
@@ -578,9 +609,11 @@ void setup(void) {
         setupArduinoOTA();
     }
 
+    setupTaskManager();
     DBG_OUTPUT_PORT.println(">> Ready.");
 }
 
 void loop(void){
     ArduinoOTA.handle();
+    taskManager.Loop();
 }
