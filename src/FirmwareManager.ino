@@ -48,20 +48,6 @@ MD5Builder md5;
 TaskManager taskManager;
 TaskFlash taskFlash(1);
 
-void reverseBitOrder(uint8_t *buffer) {
-    for (int i = 0 ; i < 256 ; i++) { 
-        buffer[i] = (buffer[i] & 0xF0) >> 4 | (buffer[i] & 0x0F) << 4;
-        buffer[i] = (buffer[i] & 0xCC) >> 2 | (buffer[i] & 0x33) << 2;
-        buffer[i] = (buffer[i] & 0xAA) >> 1 | (buffer[i] & 0x55) << 1;
-    }
-}
-
-void initBuffer(uint8_t *buffer) {
-    for (int i = 0 ; i < 256 ; i++) { 
-        buffer[i] = 0xff; 
-    }
-}
-
 void _writeFile(const char *filename, const char *towrite, unsigned int len) {
     File f = SPIFFS.open(filename, "w");
     if (f) {
@@ -188,7 +174,7 @@ int writeProgress(uint8_t *buffer, size_t maxLen, int progress) {
     return alen;
 }
 
-void handleFlash2(AsyncWebServerRequest *request, const char *filename) {
+void handleFlash(AsyncWebServerRequest *request, const char *filename) {
     if (SPIFFS.exists(filename)) {
         taskManager.StartTask(&taskFlash);
         request->send(200);
@@ -197,7 +183,8 @@ void handleFlash2(AsyncWebServerRequest *request, const char *filename) {
     }
 }
 
-void handleFlash(AsyncWebServerRequest *request, const char *filename) {
+/*
+void handleFlashOld(AsyncWebServerRequest *request, const char *filename) {
     page = 0;
     finished = false;
     totalLength = -1;
@@ -250,6 +237,7 @@ void handleFlash(AsyncWebServerRequest *request, const char *filename) {
         request->send(404);
     }
 }
+*/
 
 void handleDownload(AsyncWebServerRequest *request) {
     headerFound = false;
@@ -320,7 +308,7 @@ void handleDownload(AsyncWebServerRequest *request) {
             //send the request
             DBG_OUTPUT_PORT.println("Requesting firmware...");
 
-            String httpGet = "GET /fw/" + String(firmwareVersion) + "/DCxPlus-" + String(firmwareFPGA) + "-" + String(firmwareFormat) + ".rbf HTTP/1.0\r\nHost: dc.i74.de\r\n\r\n";
+            String httpGet = "GET /fw/" + String(firmwareVersion) + "/DCxPlus-" + String(firmwareFPGA) + "-" + String(firmwareFormat) + "." + FIRMWARE_EXTENSION + " HTTP/1.0\r\nHost: dc.i74.de\r\n\r\n";
             client->write(httpGet.c_str());
         }, NULL);
 
@@ -475,17 +463,19 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        handleFlash2(request, FIRMWARE_FILE);
+        handleFlash(request, FIRMWARE_FILE);
     });
 
+/*
     server.on("/secureflash", HTTP_GET, [](AsyncWebServerRequest *request){
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
         //startFPGAConfiguration();
-        handleFlash(request, FIRMWARE_FILE);
+        handleFlashOld(request, FIRMWARE_FILE);
         //endFPGAConfiguration();
     });
+*/
 
     server.on("/progress", HTTP_GET, [](AsyncWebServerRequest *request) {
         if(!_isAuthenticated(request)) {

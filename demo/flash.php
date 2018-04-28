@@ -11,5 +11,5 @@
         usleep(70000);
     }
 
-    $_SESSION["last_flash_md5"] = $_SESSION["firmware.rbf.md5"] ? $_SESSION["firmware.rbf.md5"] : "751bfdeb1793261853887dc11c876d40";
+    $_SESSION["last_flash_md5"] = $_SESSION["firmware.dc.md5"] ? $_SESSION["firmware.dc.md5"] : "751bfdeb1793261853887dc11c876d40";
     

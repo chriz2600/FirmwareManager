@@ -1,6 +1,9 @@
 // for browsers that don't support key property
 keyboardeventKeyPolyfill.polyfill();
 
+var FIRMWARE_FILE = "/firmware.dc";
+var FIRMWARE_EXTENSION = "dc";
+
 function typed(finish_typing) {
     return function(term, message, delay, finish) {
         anim = true;
@@ -348,7 +351,7 @@ function uploadFile(isRetry) {
 
     client.onload = function(e) {
         if (client.status >= 200 && client.status < 400) {
-            $.ajax("/firmware.rbf.md5").done(function (data) {
+            $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
                 endTransactionWithMD5Check(lastMD5, data, "Please try to re-download file.");
             }).fail(function() {
                 endTransaction('Error reading checksum', true);
@@ -539,14 +542,14 @@ function _getMD5File() {
         + "/fw/" + currentConfigData["firmware_version"]
         + "/DCxPlus-" + currentConfigData["firmware_fpga"]
         + "-" + currentConfigData["firmware_format"]
-        + ".rbf.md5?cc=" + Math.random()
+        + "." + FIRMWARE_EXTENSION + ".md5?cc=" + Math.random()
     );
 }
 
 function getFirmwareData() {
     $.ajax("/etc/last_flash_md5").done(function (data) {
         var lastFlashMd5 = $.trim(data);
-        $.ajax("/firmware.rbf.md5").done(function (data) {
+        $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
             var stagedMd5 = $.trim(data);
             $.ajax(_getMD5File()).done(function (data) {
                 var origMd5 = $.trim(data);
@@ -608,7 +611,7 @@ function downloadFile() {
                 var pgrs = $.trim(data);
                 term.set_prompt(progress(pgrs, progressSize));
                 if (pgrs == "100") {
-                    $.ajax("/firmware.rbf.md5").done(function (data) {
+                    $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
                         var calcMd5 = $.trim(data);
                         $.ajax(_getMD5File()).done(function (data) {
                             var origMd5 = $.trim(data);
@@ -641,7 +644,7 @@ function flash(secure) {
                 var pgrs = $.trim(data);
                 term.set_prompt(progress(pgrs, progressSize));
                 if (pgrs == "100") {
-                    $.ajax("/firmware.rbf.md5").done(function (data) {
+                    $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
                         var calcMd5 = $.trim(data);
                         $.ajax("/etc/last_flash_md5").done(function (data) {
                             var lastFlashMd5 = $.trim(data);
@@ -676,7 +679,7 @@ function flash(secure) {
 
     client.onload = function() {
         term.set_prompt(progress(100, progressSize));
-        $.ajax("/firmware.rbf.md5").done(function (data) {
+        $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
             var calcMd5 = $.trim(data);
             $.ajax("/etc/last_flash_md5").done(function (data) {
                 var lastFlashMd5 = $.trim(data);

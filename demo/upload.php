@@ -3,6 +3,6 @@
         session_start();
     }
 
-    $_SESSION["firmware.rbf.md5"] = md5_file($_FILES['file']['tmp_name']);
+    $_SESSION["firmware.dc.md5"] = md5_file($_FILES['file']['tmp_name']);
     usleep(150000);
 
