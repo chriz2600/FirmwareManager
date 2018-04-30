@@ -33,6 +33,7 @@ bool inInitialSetupMode = false;
 String fname;
 AsyncWebServer server(80);
 SPIFlash flash(CS);
+int last_error = 0; 
 
 static AsyncClient *aClient = NULL;
 File flashFile;
@@ -483,9 +484,17 @@ void setupHTTPServer() {
         }
         DBG_OUTPUT_PORT.printf("progress requested...\n");
         char msg[64];
-        sprintf(msg, "%i\n", totalLength <= 0 ? 0 : (int)(readLength * 100 / totalLength));
-        request->send(200, "text/plain", msg);
-        DBG_OUTPUT_PORT.printf("...delivered: %s.\n", msg);
+        if (last_error) {
+            sprintf(msg, "ERROR %i\n", last_error);
+            request->send(200, "text/plain", msg);
+            DBG_OUTPUT_PORT.printf("...delivered: %s (%i).\n", msg, last_error);
+            // clear last_error
+            last_error = 0;
+        } else {
+            sprintf(msg, "%i\n", totalLength <= 0 ? 0 : (int)(readLength * 100 / totalLength));
+            request->send(200, "text/plain", msg);
+            DBG_OUTPUT_PORT.printf("...delivered: %s.\n", msg);
+        }
     });
 
     server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request) {

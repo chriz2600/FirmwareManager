@@ -2,8 +2,6 @@
 #include <Task.h>
 #include <fastlz.h>
 
-#define BLOCK_SIZE 1536
-
 extern int totalLength;
 extern int readLength;
 extern unsigned int page;
@@ -12,6 +10,7 @@ extern bool finished;
 extern MD5Builder md5;
 extern File flashFile;
 extern SPIFlash flash;
+extern int last_error;
 
 void reverseBitOrder(uint8_t *buffer);
 void _writeFile(const char *filename, const char *towrite, unsigned int len);
@@ -33,8 +32,9 @@ class TaskFlash : public Task {
         uint8_t *buffer = NULL;
         uint8_t *result = NULL;
         uint8_t *result_start = NULL;
-
+        uint8_t header[16];
         size_t bytes_in_result = 0;
+        size_t block_size = 1536;
         int chunk_size = 0;
 
         virtual bool OnStart() {
@@ -47,25 +47,45 @@ class TaskFlash : public Task {
             chunk_size = 0;
             bytes_in_result = 0;
 
-            buffer = (uint8_t *) malloc(BLOCK_SIZE);
-            result = (uint8_t *) malloc(BLOCK_SIZE);
-            result_start = result;
-            // initialze complete buffer with flash "default"
-            initBuffer(result, BLOCK_SIZE);
-
             md5.begin();
             flashFile = SPIFFS.open(FIRMWARE_FILE, "r");
 
             if (flashFile) {
-                flashFile.readBytes((char *) buffer, 4);
-                md5.add(buffer, 4);
-                totalLength = (buffer[0] + (buffer[1] << 8) + (buffer[2] << 16) + (buffer[3] << 24)) / 256;
+                flashFile.readBytes((char *) header, 16);
 
+                // check "magic"
+                if (header[0] != 'D' || header[1] != 'C' || header[2] != 0x07 || header[3] != 0x04) {
+                    last_error = ERROR_WRONG_MAGIC;
+                    return false;
+                }
+
+                // check version
+                if (header[4] != 0x01 || header[5] != 0x00) {
+                    last_error = ERROR_WRONG_VERSION;
+                    return false;
+                }
+
+                // read block size
+                block_size = header[6] + (header[7] << 8);
+
+                // read file size and convert it to flash pages by dividing by 256
+                totalLength = (header[8] + (header[9] << 8) + (header[10] << 16) + (header[11] << 24)) / 256;
+
+                md5.add(header, 16);
+
+                buffer = (uint8_t *) malloc(block_size);
+                result = (uint8_t *) malloc(block_size);
+                result_start = result;
+                // initialze complete buffer with flash "default"
+                initBuffer(result, block_size);
+
+                // erase chip
                 flash.enable();
                 flash.chip_erase_async();
-                
+
                 return true;
             } else {
+                last_error = ERROR_FILE;
                 return false;
             }
         }
@@ -97,7 +117,7 @@ class TaskFlash : public Task {
 
             if (chunk_size > 0) {
                 // step 3: decompress
-                bytes_in_result = fastlz_decompress(buffer, chunk_size, result, BLOCK_SIZE);
+                bytes_in_result = fastlz_decompress(buffer, chunk_size, result, block_size);
                 chunk_size = 0;
                 return 0; /* no bytes written yet */
             }
@@ -141,10 +161,12 @@ class TaskFlash : public Task {
             String md5sum = md5.toString();
             _writeFile("/etc/last_flash_md5", md5sum.c_str(), md5sum.length());
             finished = true;
-            free(buffer);
+            if (buffer != NULL)
+                free(buffer);
             // make sure pointer is reset to original start
             result = result_start;
-            free(result);
+            if (result != NULL)
+                free(result);
             buffer = NULL;
             result = NULL;
             result_start = NULL;

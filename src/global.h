@@ -9,4 +9,8 @@
 #ifndef GLOBAL_H
 #define GLOBAL_H
 
+#define ERROR_WRONG_MAGIC 16
+#define ERROR_WRONG_VERSION 17
+#define ERROR_FILE 18
+
 #endif

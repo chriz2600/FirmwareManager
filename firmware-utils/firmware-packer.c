@@ -35,9 +35,10 @@ int main(int argc, char** argv) {
     char* output_file = 0;
     unsigned int i = 0;
     unsigned long fsize = 0;
-    unsigned char chunk_header[4];
     unsigned char buffer[BLOCK_SIZE];
     unsigned char result[BLOCK_SIZE+256];
+    unsigned char header[16];
+    unsigned char chunk_header[2];
     unsigned long total_read = 0;
     unsigned long total_compressed = 0;
     int chunk_size = 0;
@@ -71,13 +72,30 @@ int main(int argc, char** argv) {
     fsize = ftell(in);
     fseek(in, 0, SEEK_SET);
 
-    // write file size
-    chunk_header[0] = fsize & 255;
-    chunk_header[1] = (fsize >> 8) & 255;
-    chunk_header[2] = (fsize >> 16) & 255;
-    chunk_header[3] = (fsize >> 24) & 255;
+    // create header
+    // "magic"
+    header[0] = 'D';
+    header[1] = 'C';
+    header[2] = 0x07;
+    header[3] = 0x04;
+    // version
+    header[4] = 0x01;
+    header[5] = 0x00;
+    // block size
+    header[6] = BLOCK_SIZE & 255;
+    header[7] = (BLOCK_SIZE >> 8) & 255;
+    // file size 
+    header[8] = fsize & 255;
+    header[9] = (fsize >> 8) & 255;
+    header[10] = (fsize >> 16) & 255;
+    header[11] = (fsize >> 24) & 255;
+    // currently not used
+    header[12] = 0x00;
+    header[13] = 0x00;
+    header[14] = 0x00;
+    header[15] = 0x00;
 
-    fwrite(chunk_header, 4, 1, out);
+    fwrite(header, 16, 1, out);
 
     // pack it!
     for(;;) {

@@ -602,34 +602,46 @@ function reset() {
     });
 }
 
+function doProgress(successCallback) {
+    function progressPoll() {
+        $.ajax("/progress").done(function (data) {
+            var pgrs = $.trim(data);
+            if (pgrs.indexOf("ERROR") == 0) {
+                endTransaction(pgrs, true)
+            } else {
+                term.set_prompt(progress(pgrs, progressSize));
+                if (pgrs == "100") {
+                    successCallback();
+                } else {
+                    setTimeout(progressPoll, 1500);
+                }
+            }
+        }).fail(function () {
+            endTransaction('Error reading progress', true);
+        })
+    };
+    setTimeout(progressPoll, 1500);
+}
+
 function downloadFile() {
     //startSpinner(term, spinners["shark"]);
     term.set_prompt(progress(0, progressSize));
     $.ajax("/download").done(function (data) {
-        function progressPoll() {
-            $.ajax("/progress").done(function (data) {
-                var pgrs = $.trim(data);
-                term.set_prompt(progress(pgrs, progressSize));
-                if (pgrs == "100") {
-                    $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
-                        var calcMd5 = $.trim(data);
-                        $.ajax(_getMD5File()).done(function (data) {
-                            var origMd5 = $.trim(data);
-                            endTransactionWithMD5Check(calcMd5, origMd5, "Please try to re-download file.");
-                        }).fail(function() {
-                            endTransaction('Error reading original checksum', true);
-                        });
+        doProgress(
+            function() {
+                $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
+                    var calcMd5 = $.trim(data);
+                    $.ajax(_getMD5File()).done(function (data) {
+                        var origMd5 = $.trim(data);
+                        endTransactionWithMD5Check(calcMd5, origMd5, "Please try to re-download file.");
                     }).fail(function() {
-                        endTransaction('Error reading checksum', true);
+                        endTransaction('Error reading original checksum', true);
                     });
-                } else {
-                    setTimeout(progressPoll, 1500);
-                }
-            }).fail(function () {
-                endTransaction('Error reading progress', true);
-            })
-        };
-        setTimeout(progressPoll, 1500);
+                }).fail(function() {
+                    endTransaction('Error reading checksum', true);
+                });
+            }
+        );
     }).fail(function() {
         endTransaction("Error starting download!", true);
     });
@@ -639,30 +651,21 @@ function flash(secure) {
     //startSpinner(term, spinners["shark"]);
     term.set_prompt(progress(0, progressSize));
     $.ajax(secure ? "/secureflash" : "/flash").done(function (data) {
-        function progressPoll() {
-            $.ajax("/progress").done(function (data) {
-                var pgrs = $.trim(data);
-                term.set_prompt(progress(pgrs, progressSize));
-                if (pgrs == "100") {
-                    $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
-                        var calcMd5 = $.trim(data);
-                        $.ajax("/etc/last_flash_md5").done(function (data) {
-                            var lastFlashMd5 = $.trim(data);
-                            endTransactionWithMD5Check(calcMd5, lastFlashMd5, "Please try to re-flash.");
-                        }).fail(function() {
-                            endTransaction('Error reading checksum', true);
-                        });
+        doProgress(
+            function() {
+                $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
+                    var calcMd5 = $.trim(data);
+                    $.ajax("/etc/last_flash_md5").done(function (data) {
+                        var lastFlashMd5 = $.trim(data);
+                        endTransactionWithMD5Check(calcMd5, lastFlashMd5, "Please try to re-flash.");
                     }).fail(function() {
                         endTransaction('Error reading checksum', true);
                     });
-                } else {
-                    setTimeout(progressPoll, 1500);
-                }
-            }).fail(function () {
-                endTransaction('Error reading progress', true);
-            })
-        };
-        setTimeout(progressPoll, 1500);
+                }).fail(function() {
+                    endTransaction('Error reading checksum', true);
+                });
+            }
+        );
     }).fail(function() {
         endTransaction("Error starting flash process!", true);
     });
