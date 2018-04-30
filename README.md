@@ -69,7 +69,7 @@ See [ESP8266 Boot Mode Selection](https://github.com/espressif/esptool/wiki/ESP8
 If you have to program more than one ESP-07 [this](https://www.tindie.com/products/petl/esp12-programmer-board-with-pogo-pins/) might come in handy.
 
 ```
-esptool.py -p <serial_port> write_flash 0x00000000 firmware.bin 0x00100000 spiffs.bin
+esptool.py -p <serial_port> write_flash 0x00000000 firmware.bin 0x0007B000 spiffs.bin
 
 serial_port: 
     e.g. COM5 on windows, /dev/cu.usbserial-A50285BI on OSX.
