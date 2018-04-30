@@ -25,6 +25,10 @@ Pass: testtest
 
 After connecting to [URL](http://192.168.4.1), you will be guided through the setup process.
 
+**Be sure to set the "OTA Password" to be able to upload a newer ESP firmware "over the air" in the future!**
+
+Restart the ESP-07 after setup is done with the command `restart`. If SSID and password are correct the Firmware Manager should now be connected to your local WiFi network.
+
 ## Connecting to module after setup:
 
 After that - if your system supports mDNS (MAC OS X, Linux with avahi and Windows with Apple bonjour installed) - you can connect to [dc-firmware-manager.local][dcfwm] to flash a new firmware.
