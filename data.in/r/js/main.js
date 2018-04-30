@@ -260,7 +260,7 @@ function helpDetails() {
     msg = "[[b;#fff;]Firmware upgrade procedure:]\n"
         + "  ________          ___________         _________\n"
         + " /        \\        /           \\ flash /         \\\n"
-        + " | jQuery |        |  esp-12e  |------>|  FPGA   |\n"
+        + " | jQuery |        |   esp-07  |------>|  FPGA   |\n"
         + " |  Term  | upload |  staging  | reset |  flash  |\n"
         + " | (this) |------->|   flash   |------>|  (SPI)  |\n"
         + " \\________/        \\___________/       \\_________/\n"

@@ -6,11 +6,11 @@ firmware:
     - "pio run -t buildfs"
     - "mkdir -p /srv/esp/${CI_COMMIT_REF_NAME}"
     - "chmod 777 /srv/esp/${CI_COMMIT_REF_NAME}"
-    - "cp .pioenvs/esp12e/*.bin /srv/esp/${CI_COMMIT_REF_NAME}"
+    - "cp .pioenvs/esp07/*.bin /srv/esp/${CI_COMMIT_REF_NAME}"
   artifacts:
     paths:
-    - .pioenvs/esp12e/firmware.bin
-    - .pioenvs/esp12e/spiffs.bin
+    - .pioenvs/esp07/firmware.bin
+    - .pioenvs/esp07/spiffs.bin
   tags:
     - platformio
 

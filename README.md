@@ -1,6 +1,6 @@
 # Firmware Manager for DreamcastHDMI
 
-This was designed to provide an easy way to upgrade the firmware of my DreamcastHDMI project using an [ESP-12e][esp12e], but it should be easily adapted to other projects, where a SPI Flash should be programmed (in a failsafe manner, as the ESP12-e firmware is not altered).
+This was designed to provide an easy way to upgrade the firmware of my DreamcastHDMI project using an [ESP-07][esp07], but it should be easily adapted to other projects, where a SPI Flash should be programmed (in a failsafe manner, as the ESP-07 firmware is not altered).
 
 ## Initial setup:
 
@@ -28,14 +28,14 @@ Just type "help" and "details" to get information about how to upgrade firmware.
 
 [dc-fw-manager.i74.de][dcfwdemo]
 
-## To build ESP-12e firmware:
+## To build ESP-07 firmware:
 
 - To build you need platformio:
 
 | Command | Comment |
 |-|-|
 | `pio run` | to build |
-| `pio upload` | to upload to ESP-12e (remember to check upload related settings in platformio.ini) |
+| `pio upload` | to upload to ESP-07 (remember to check upload related settings in platformio.ini) |
 
 ## To create inlined index.html:
 
@@ -62,11 +62,11 @@ The firmware is divided into 2 parts, one (firmware.bin) is the actual firmware,
 
 #### First time flash:
 
-To flash the firmware/filesystem image the ESP-12e must be booted into serial programming mode.
+To flash the firmware/filesystem image the ESP-07 must be booted into serial programming mode.
 
 See [ESP8266 Boot Mode Selection](https://github.com/espressif/esptool/wiki/ESP8266-Boot-Mode-Selection) for details.
 
-If you have to program more than one ESP-12e [this](https://www.tindie.com/products/petl/esp12-programmer-board-with-pogo-pins/) might come in handy.
+If you have to program more than one ESP-07 [this](https://www.tindie.com/products/petl/esp12-programmer-board-with-pogo-pins/) might come in handy.
 
 ```
 esptool.py -p <serial_port> write_flash 0x00000000 firmware.bin 0x00100000 spiffs.bin
@@ -75,7 +75,19 @@ serial_port:
     e.g. COM5 on windows, /dev/cu.usbserial-A50285BI on OSX.
 ```
 
-After that, the ESP-12e can be programmed "over the air".
+After that, the ESP-07 can be programmed "over the air", if a OTA password was set in setup before.
+
+To do an OTA update you need [espota.py](https://github.com/esp8266/Arduino/blob/master/tools/espota.py) or platformio
+
+
+```
+espota.py -r -i dc-firmware-manager.local -p 8266 -a <OTA-password> -f firmware.bin
+
+
+OTA-password:
+    this must be set via the `setup` command.
+
+```
 
 ## Schematic:
 
@@ -84,5 +96,5 @@ After that, the ESP-12e can be programmed "over the air".
 ----
 
 [dcfwdemo]: http://dc-fw-manager.i74.de/
-[esp12e]: http://www.esp8266.com/wiki/doku.php?id=esp8266-module-family#esp-12-e_q
+[esp07]: https://www.esp8266.com/wiki/doku.php?id=esp8266-module-family#esp-07
 [dcfwm]: http://dc-firmware-manager.local
