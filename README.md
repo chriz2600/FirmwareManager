@@ -2,6 +2,12 @@
 
 This was designed to provide an easy way to upgrade the firmware of my DreamcastHDMI project using an [ESP-07][esp07], but it should be easily adapted to other projects, where a SPI Flash should be programmed (in a failsafe manner, as the ESP-07 firmware is not altered).
 
+##### Why ESP-07? Why not use ESP-12e?
+
+The ESP is operating inside the dreamcast's metal shielding, so it is necassary to mount the antenna outside of this. In order to avoid wifi signals inside the metal shield, one component has to be removed. This disables the on board antenna:
+
+![ESP-07 diable on board antenna](https://raw.githubusercontent.com/chriz2600/FirmwareManager/master/misc/ESP-07.jpg)
+
 ## Initial setup:
 
 On first startup the module acts as access point with predefined ssid/password. When connected you can setup the module, so it connects to your wifi router. 
