@@ -467,6 +467,13 @@ void setupHTTPServer() {
         handleFlash(request, FIRMWARE_FILE);
     });
 
+    server.on("/cleanup", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        SPIFFS.remove(FIRMWARE_FILE);
+        request->send(200);
+    });
 /*
     server.on("/secureflash", HTTP_GET, [](AsyncWebServerRequest *request){
         if(!_isAuthenticated(request)) {
@@ -575,8 +582,18 @@ void setupSPIFFS() {
     DBG_OUTPUT_PORT.printf(">> Setting up SPIFFS...\n");
     SPIFFS.begin();
     {
+        FSInfo fs_info;
+        SPIFFS.info(fs_info);
+
+        DBG_OUTPUT_PORT.printf(">> totalBytes: (%lu)\n", fs_info.totalBytes);
+        DBG_OUTPUT_PORT.printf(">> usedBytes: (%lu)\n", fs_info.usedBytes);
+        DBG_OUTPUT_PORT.printf(">> blockSize: (%lu)\n", fs_info.blockSize);
+        DBG_OUTPUT_PORT.printf(">> pageSize: (%lu)\n", fs_info.pageSize);
+        DBG_OUTPUT_PORT.printf(">> maxOpenFiles: (%lu)\n", fs_info.maxOpenFiles);
+        DBG_OUTPUT_PORT.printf(">> maxPathLength: (%lu)\n", fs_info.maxPathLength);
+
         Dir dir = SPIFFS.openDir("/");
-        while (dir.next()) {    
+        while (dir.next()) {
             String fileName = dir.fileName();
             size_t fileSize = dir.fileSize();
             DBG_OUTPUT_PORT.printf(">> %s (%lu)\n", fileName.c_str(), fileSize);

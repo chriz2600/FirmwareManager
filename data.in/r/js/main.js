@@ -184,6 +184,10 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             getConfig(true);
         });
+    } else if (command.match(/^\s*cleanup\s*$/)) {
+        startTransaction(null, function() {
+            doDeleteFirmwareFile();
+        });
     } else if (command.match(/^\s*details\s*$/)) {
         helpDetails();
     } else if (command.match(/^\s*banner\s*$/)) {
@@ -224,6 +228,7 @@ var term = $('#term').terminal(function(command, term) {
         "clear",
         "banner",
         "restart",
+        "cleanup",
         "exit"
     ],
     prompt: 'dc-hdmi> ',
@@ -310,6 +315,7 @@ function help(full) {
     msg += "[[b;#fff;]config]:      get current setup\n";
     msg += "[[b;#fff;]clear]:       clear terminal screen\n";
     msg += "[[b;#fff;]restart]:     restarts ESP module\n";
+    msg += "[[b;#fff;]cleanup]:     remove staged firmware file\n";
     msg += "[[b;#fff;]exit]:        end terminal\n";
 
     typed_message(term, msg, 1);
@@ -425,6 +431,11 @@ function prepareQuestion(pos, total, field) {
 function restartESP() {
     $.ajax("/restart");
     endTransaction('ESP module restarted.');
+}
+
+function doDeleteFirmwareFile() {
+    $.ajax("/cleanup");
+    endTransaction('firmware file removed.');
 }
 
 function getConfig(show, cb) {
