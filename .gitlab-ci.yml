@@ -6,11 +6,16 @@ firmware:
     - "pio run -t buildfs"
     - "mkdir -p /srv/esp/${CI_COMMIT_REF_NAME}"
     - "chmod 777 /srv/esp/${CI_COMMIT_REF_NAME}"
-    - "cp .pioenvs/esp07/*.bin /srv/esp/${CI_COMMIT_REF_NAME}"
+    - "cp .pioenvs/esp07/firmware.bin /srv/esp/${CI_COMMIT_REF_NAME}/1MB-firmware.bin"
+    - "cp .pioenvs/esp07/spiffs.bin /srv/esp/${CI_COMMIT_REF_NAME}/1MB-spiffs.bin"
+    - "cp .pioenvs/esp07s/firmware.bin /srv/esp/${CI_COMMIT_REF_NAME}/4MB-firmware.bin"
+    - "cp .pioenvs/esp07s/spiffs.bin /srv/esp/${CI_COMMIT_REF_NAME}/4MB-spiffs.bin"
   artifacts:
     paths:
     - .pioenvs/esp07/firmware.bin
     - .pioenvs/esp07/spiffs.bin
+    - .pioenvs/esp07s/firmware.bin
+    - .pioenvs/esp07s/spiffs.bin
   tags:
     - platformio
 
