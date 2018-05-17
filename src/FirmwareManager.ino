@@ -504,6 +504,15 @@ void setupHTTPServer() {
         }
     });
 
+    server.on("/flash_size", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        char msg[64];
+        sprintf(msg, "%lu\n", ESP.getFlashChipSize());
+        request->send(200, "text/plain", msg);
+    });
+
     server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request) {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
@@ -591,6 +600,9 @@ void setupSPIFFS() {
         DBG_OUTPUT_PORT.printf(">> pageSize: (%lu)\n", fs_info.pageSize);
         DBG_OUTPUT_PORT.printf(">> maxOpenFiles: (%lu)\n", fs_info.maxOpenFiles);
         DBG_OUTPUT_PORT.printf(">> maxPathLength: (%lu)\n", fs_info.maxPathLength);
+        DBG_OUTPUT_PORT.printf(">> maxSketchSpace 1: (%lu)\n", ESP.getFreeSketchSpace());
+        DBG_OUTPUT_PORT.printf(">> maxSketchSpace 2: (%lu)\n", (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
+        DBG_OUTPUT_PORT.printf(">> flashChipSize: (%lu)\n", ESP.getFlashChipSize());
 
         Dir dir = SPIFFS.openDir("/");
         while (dir.next()) {

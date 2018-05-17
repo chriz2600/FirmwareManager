@@ -84,7 +84,7 @@ If you have to program more than one ESP [this](https://www.tindie.com/products/
 
 ```
 # esp07 (1MB flash) 
-esptool.py -p <serial_port> write_flash 0x00000000 firmware.bin 0x0007B000 spiffs.bin
+esptool.py -p <serial_port> write_flash 0x00000000 firmware.bin 0x000BB000 spiffs.bin
 # esp07s (4MB flash)
 esptool.py -p <serial_port> write_flash 0x00000000 firmware.bin 0x00100000 spiffs.bin
 

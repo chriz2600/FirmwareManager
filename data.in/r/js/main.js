@@ -188,6 +188,10 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             doDeleteFirmwareFile();
         });
+    } else if (command.match(/^\s*flash_chip_size\s*$/)) {
+        startTransaction(null, function() {
+            getFlashChipSize();
+        });
     } else if (command.match(/^\s*details\s*$/)) {
         helpDetails();
     } else if (command.match(/^\s*banner\s*$/)) {
@@ -436,6 +440,14 @@ function restartESP() {
 function doDeleteFirmwareFile() {
     $.ajax("/cleanup");
     endTransaction('firmware file removed.');
+}
+
+function getFlashChipSize() {
+    $.ajax("/flash_size").done(function (data) {
+        endTransaction("Flash chip size: " + $.trim(data) + " Bytes");
+    }).fail(function() {
+        endTransaction('Error getting current config.', true);
+    });
 }
 
 function getConfig(show, cb) {
