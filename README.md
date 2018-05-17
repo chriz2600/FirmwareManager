@@ -10,8 +10,7 @@ The ESP is operating inside the dreamcast's metal shielding, so it is necassary 
 
 Another very nice option is the ESP-07S, which comes without an external antenna. It usually also has 4MB instead of 1MB of flash memory.
 
-![ESP-07S on DCHDMI]
-(https://raw.githubusercontent.com/chriz2600/FirmwareManager/master/misc/esp07s_2.jpg)
+![ESP-07S on DCHDMI](https://raw.githubusercontent.com/chriz2600/FirmwareManager/master/misc/esp07s_2.jpg)
 
 ## Initial setup:
 
