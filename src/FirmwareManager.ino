@@ -30,6 +30,7 @@ const char* host = "dc-firmware-manager";
 const char* WiFiAPPSK = "geheim1234";
 IPAddress ipAddress( 192, 168, 4, 1 );
 bool inInitialSetupMode = false;
+bool fpgaDisabled = false;
 String fname;
 AsyncWebServer server(80);
 SPIFlash flash(CS);
@@ -117,6 +118,20 @@ void setupAPMode(void) {
     DBG_OUTPUT_PORT.printf(">> SSID:   %s\n", AP_NameChar);
     DBG_OUTPUT_PORT.printf(">> AP-PSK: %s\n", WiFiAPPSK);
     inInitialSetupMode = true;
+}
+
+void disableFPGA() {
+    pinMode(NCE, OUTPUT);
+    digitalWrite(NCE, HIGH);
+    fpgaDisabled = true;
+}
+
+void enableFPGA() {
+    if (fpgaDisabled) {
+        digitalWrite(NCE, LOW);
+        pinMode(NCE, INPUT);
+        fpgaDisabled = false;
+    }
 }
 
 void startFPGAConfiguration() {
@@ -474,16 +489,14 @@ void setupHTTPServer() {
         SPIFFS.remove(FIRMWARE_FILE);
         request->send(200);
     });
-/*
+
     server.on("/secureflash", HTTP_GET, [](AsyncWebServerRequest *request){
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        //startFPGAConfiguration();
-        handleFlashOld(request, FIRMWARE_FILE);
-        //endFPGAConfiguration();
+        disableFPGA();
+        handleFlash(request, FIRMWARE_FILE);
     });
-*/
 
     server.on("/progress", HTTP_GET, [](AsyncWebServerRequest *request) {
         if(!_isAuthenticated(request)) {
@@ -518,6 +531,7 @@ void setupHTTPServer() {
             return request->requestAuthentication();
         }
         DBG_OUTPUT_PORT.printf("FPGA reset requested...\n");
+        enableFPGA();
         resetFPGAConfiguration();
         request->send(200, "text/plain", "OK\n");
         DBG_OUTPUT_PORT.printf("...delivered.\n");
@@ -625,7 +639,8 @@ void setup(void) {
     DBG_OUTPUT_PORT.printf("\n>> FirmwareManager starting...\n");
     DBG_OUTPUT_PORT.setDebugOutput(DEBUG);
 
-    pinMode(NCONFIG, INPUT);    
+    pinMode(NCE, INPUT);    
+    pinMode(NCONFIG, INPUT);
 
     setupSPIFFS();
     setupCredentials();

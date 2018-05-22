@@ -1,4 +1,5 @@
 #define CS 16
+#define NCE 4
 #define NCONFIG 5
 #define DBG_OUTPUT_PORT Serial
 #define FIRMWARE_FILE "/firmware.dc"

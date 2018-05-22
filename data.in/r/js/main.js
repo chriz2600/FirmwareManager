@@ -148,10 +148,10 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             getConfig(false, downloadFile);
         });
-    /*} else if (command.match(/^\s*secureflash\s*$/)) {
+    } else if (command.match(/^\s*secureflash\s*$/)) {
         startTransaction(null, function() {
             flash(true);
-        });*/
+        });
     } else if (command.match(/^\s*flash\s*$/)) {
         startTransaction(null, function() {
             flash();
@@ -224,7 +224,7 @@ var term = $('#term').terminal(function(command, term) {
         "upload",
         "download",
         "flash",
-        /*"secureflash",*/
+        "secureflash",
         "reset",
         "details",
         "setup",
@@ -312,7 +312,7 @@ function help(full) {
     msg += "[[b;#fff;]upload]:      upload selected file\n";
     msg += "[[b;#fff;]download]:    download latest flash file from dc.i74.de\n";
     msg += "[[b;#fff;]flash]:       flash FPGA from staging area\n";
-    /*msg += "[[b;#fff;]secureflash]: flash FPGA from staging area, while disabling fpga\n";*/
+    msg += "[[b;#fff;]secureflash]: flash FPGA from staging area, while disabling fpga\n";
     msg += "[[b;#fff;]reset]:       reset FPGA\n";
     msg += "[[b;#fff;]details]:     show firmware upgrade procedure\n";
     msg += "[[b;#fff;]setup]:       enter setup mode\n";
@@ -694,49 +694,6 @@ function flash(secure) {
     });
 }
 
-/*function flash(secure) {
-    term.set_prompt(progress(0, progressSize));
-
-    var client = new XMLHttpRequest();
-
-    client.onerror = function(e) {
-        endTransaction('[[b;red;]FAIL]\n');
-    };
-
-    client.onload = function() {
-        term.set_prompt(progress(100, progressSize));
-        $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
-            var calcMd5 = $.trim(data);
-            $.ajax("/etc/last_flash_md5").done(function (data) {
-                var lastFlashMd5 = $.trim(data);
-                endTransactionWithMD5Check(calcMd5, lastFlashMd5, "Please try to re-flash.");
-            }).fail(function() {
-                endTransaction('Error reading checksum', true);
-            });
-        }).fail(function() {
-            endTransaction('Error reading checksum', true);
-        });
-    };
-
-    client.onreadystatechange = function() {
-        if (client.readyState == 3) {
-            var lines = client.responseText.split(/\n/);
-            lines.pop();
-            var pgrs = $.trim(lines.pop());
-            term.set_prompt(progress(pgrs, progressSize));
-        }
-    };
-
-    client.onabort = function(e) {
-        endTransaction("Flashing aborted!", true);
-    };
-
-
-    client.open("GET", secure ? "/secureflash" : "/flash");
-    client.send(null);
-
-}
-*/
 function endTransactionWithMD5Check(chk1, chk2, msg) {
     endTransaction(
         progress(100, progressSize) + ' [[b;green;]OK]\n'
@@ -747,23 +704,3 @@ function endTransactionWithMD5Check(chk1, chk2, msg) {
         + (chk1 == chk2 ? "" : "\n" + msg)
     );
 }
-
-/*
-var i;
-var timer;
-var prompt;
-var spinner;
-function startSpinner(term, spinner) {
-    i = 0;
-    function set() {
-        var text = spinner.frames[i++ % spinner.frames.length];
-        term.set_prompt(text);
-    };
-    prompt = term.get_prompt();
-    set();
-    timer = setInterval(set, spinner.interval);
-}
-function stopSpinner() {
-    clearInterval(timer);
-}
-*/
