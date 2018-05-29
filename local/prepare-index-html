@@ -8,7 +8,7 @@ cd $(dirname $0)/..
 
 which inliner
 
-inliner -m data.in/index.html > data/index.html
+inliner -debug -m data.in/index.html > data/index.html
 gzip -n -f -9 data/index.html
 
 echo "... done!"
