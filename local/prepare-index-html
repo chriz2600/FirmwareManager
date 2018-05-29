@@ -1,12 +1,11 @@
 #!/bin/bash
 
 set -x
+set -e
 
 echo "prepare index.html ..."
 
 cd $(dirname $0)/..
-
-which inliner
 
 inliner -debug -m data.in/index.html > data/index.html
 gzip -n -f -9 data/index.html
