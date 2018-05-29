@@ -9,7 +9,10 @@ cd $(dirname $0)/..
 
 ls -alF data/ data.in/
 
-inliner -debug -m data.in/index.html
+apt install strace
+
+strace -f inliner -debug -m data.in/index.html
+
 inliner -debug -m data.in/index.html > data/index.html
 
 ls -alF data/ data.in/
