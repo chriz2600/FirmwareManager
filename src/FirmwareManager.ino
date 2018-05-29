@@ -16,6 +16,7 @@
 #include "ArduinoJson.h"
 #include <Task.h>
 #include "FlashTask.h"
+#include "FlashESPTask.h"
 
 char ssid[64];
 char password[64];
@@ -41,14 +42,13 @@ File flashFile;
 bool headerFound = false;
 String header = String();
 
-unsigned int page;
-bool finished;
-int totalLength;
-int readLength;
-int prevPercentComplete;
 MD5Builder md5;
 TaskManager taskManager;
-TaskFlash taskFlash(1);
+FlashTask FlashTask(1);
+FlashESPTask FlashESPTask(1);
+
+int totalLength;
+int readLength;
 
 void _writeFile(const char *filename, const char *towrite, unsigned int len) {
     File f = SPIFFS.open(filename, "w");
@@ -107,13 +107,14 @@ void setupAPMode(void) {
     String(mac[WL_MAC_ADDR_LENGTH - 1], HEX);
     macID.toUpperCase();
     String AP_NameString = String(host) + String("-") + macID;
-    
+
     char AP_NameChar[AP_NameString.length() + 1];
     memset(AP_NameChar, 0, AP_NameString.length() + 1);
     
-    for (int i=0; i<AP_NameString.length(); i++)
-    AP_NameChar[i] = AP_NameString.charAt(i);
-    
+    for (uint i=0; i<AP_NameString.length(); i++) {
+        AP_NameChar[i] = AP_NameString.charAt(i);
+    }
+
     WiFi.softAP(AP_NameChar, WiFiAPPSK);
     DBG_OUTPUT_PORT.printf(">> SSID:   %s\n", AP_NameChar);
     DBG_OUTPUT_PORT.printf(">> AP-PSK: %s\n", WiFiAPPSK);
@@ -181,7 +182,7 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
 
 int writeProgress(uint8_t *buffer, size_t maxLen, int progress) {
     char msg[5];
-    int len = 4;
+    uint len = 4;
     int alen = (len > maxLen ? maxLen : len);
 
     sprintf(msg, "% 3i\n", progress);
@@ -192,76 +193,51 @@ int writeProgress(uint8_t *buffer, size_t maxLen, int progress) {
 
 void handleFlash(AsyncWebServerRequest *request, const char *filename) {
     if (SPIFFS.exists(filename)) {
-        taskManager.StartTask(&taskFlash);
+        taskManager.StartTask(&FlashTask);
         request->send(200);
     } else {
         request->send(404);
     }
 }
 
-/*
-void handleFlashOld(AsyncWebServerRequest *request, const char *filename) {
-    page = 0;
-    finished = false;
-    totalLength = -1;
-    readLength = -1;
-    md5.begin();
-    flashFile = SPIFFS.open(filename, "r");
-
-    if (flashFile) {
-        totalLength = flashFile.size() / 256;
-
-        flash.enable();
-        flash.chip_erase_async();
-    
-        AsyncWebServerResponse *response = request->beginChunkedResponse(
-            "text/plain", [filename](uint8_t *buffer, size_t maxLen, size_t index) -> size_t 
-        {
-            if (finished) {
-                return 0;
-            }
-
-            int _read = 0;
-            if (!flash.is_busy_async()) {
-                if ((_read = flashFile.readBytes((char *) buffer, 256)) && page < PAGES) {
-                    md5.add(buffer, _read);
-                    reverseBitOrder(buffer);
-                    flash.page_write_async(page, buffer);
-                    initBuffer(buffer); // cleanup buffer
-                    page++;
-                } else {
-                    flash.disable();
-                    flashFile.close();
-                    md5.calculate();
-                    String md5sum = md5.toString();
-                    _writeFile("/etc/last_flash_md5", md5sum.c_str(), md5sum.length());
-                    finished = true;
-                }
-            }
-            readLength = page;
-            int percentComplete = (totalLength <= 0 ? 0 : (int)(readLength * 100 / totalLength));
-            if (prevPercentComplete != percentComplete) {
-                prevPercentComplete = percentComplete;
-                DBG_OUTPUT_PORT.printf("[%i]\n", percentComplete);
-            }
-            return writeProgress(buffer, maxLen, percentComplete);
-        });
-
-        response->addHeader("Server", "Dreamcast HDMI");
-        request->send(response);
+void handleESPFlash(AsyncWebServerRequest *request, const char *filename) {
+    if (SPIFFS.exists(filename)) {
+        taskManager.StartTask(&FlashESPTask);
+        request->send(200);
     } else {
         request->send(404);
     }
 }
-*/
 
-void handleDownload(AsyncWebServerRequest *request) {
+void handleFPGADownload(AsyncWebServerRequest *request) {
+    String httpGet = "GET /fw/" 
+        + String(firmwareVersion) 
+        + "/DCxPlus-" + String(firmwareFPGA) 
+        + "-" + String(firmwareFormat) 
+        + "." + FIRMWARE_EXTENSION 
+        + " HTTP/1.0\r\nHost: dc.i74.de\r\n\r\n";
+
+    _handleDownload(request, FIRMWARE_FILE, httpGet);
+}
+
+void handleESPDownload(AsyncWebServerRequest *request) {
+    String httpGet = "GET /" 
+        + String(firmwareVersion) 
+        + "/" + (ESP.getFlashChipSize() / 1024 / 1024) + "MB"
+        + "-" + "firmware"
+        + "." + ESP_FIRMWARE_EXTENSION 
+        + " HTTP/1.0\r\nHost: esp.i74.de\r\n\r\n";
+
+    _handleDownload(request, ESP_FIRMWARE_FILE, httpGet);
+}
+
+void _handleDownload(AsyncWebServerRequest *request, const char *filename, String httpGet) {
     headerFound = false;
     header = String();
     totalLength = -1;
     readLength = -1;
     md5.begin();
-    flashFile = SPIFFS.open(FIRMWARE_FILE, "w");
+    flashFile = SPIFFS.open(filename, "w");
 
     if (flashFile) {
         aClient = new AsyncClient();
@@ -272,16 +248,16 @@ void handleDownload(AsyncWebServerRequest *request) {
             delete client;
         }, NULL);
     
-        aClient->onConnect([](void *arg, AsyncClient *client) {
+        aClient->onConnect([ filename, httpGet ](void *arg, AsyncClient *client) {
             DBG_OUTPUT_PORT.println("Connected");
             aClient->onError(NULL, NULL);
 
-            client->onDisconnect([](void *arg, AsyncClient *c) {
+            client->onDisconnect([ filename ](void *arg, AsyncClient *c) {
                 DBG_OUTPUT_PORT.println("onDisconnect");
                 flashFile.close();
                 md5.calculate();
                 String md5sum = md5.toString();
-                _writeFile((String(FIRMWARE_FILE) + ".md5").c_str(), md5sum.c_str(), md5sum.length());
+                _writeFile((String(filename) + ".md5").c_str(), md5sum.c_str(), md5sum.length());
                 DBG_OUTPUT_PORT.println("Disconnected");
                 aClient = NULL;
                 delete c;
@@ -323,8 +299,6 @@ void handleDownload(AsyncWebServerRequest *request) {
         
             //send the request
             DBG_OUTPUT_PORT.println("Requesting firmware...");
-
-            String httpGet = "GET /fw/" + String(firmwareVersion) + "/DCxPlus-" + String(firmwareFPGA) + "-" + String(firmwareFormat) + "." + FIRMWARE_EXTENSION + " HTTP/1.0\r\nHost: dc.i74.de\r\n\r\n";
             client->write(httpGet.c_str());
         }, NULL);
 
@@ -443,10 +417,6 @@ void writeSetupParameter(AsyncWebServerRequest *request, const char* param, char
     }
 }
 
-String jsonSafe(const char* in) {
-
-}
-
 void setupHTTPServer() {
     DBG_OUTPUT_PORT.printf(">> Setting up HTTP server...\n");
 
@@ -468,18 +438,32 @@ void setupHTTPServer() {
         handleUpload(request, "/index.html.gz", index, data, len, final);
     });
 
-    server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request){
+    server.on("/download/fpga", HTTP_GET, [](AsyncWebServerRequest *request){
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        handleDownload(request);
+        handleFPGADownload(request);
     });
 
-    server.on("/flash", HTTP_GET, [](AsyncWebServerRequest *request){
+    server.on("/download/esp", HTTP_GET, [](AsyncWebServerRequest *request){
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        handleESPDownload(request);
+    });
+
+    server.on("/flash/fpga", HTTP_GET, [](AsyncWebServerRequest *request){
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
         handleFlash(request, FIRMWARE_FILE);
+    });
+
+    server.on("/flash/esp", HTTP_GET, [](AsyncWebServerRequest *request){
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        handleESPFlash(request, ESP_FIRMWARE_FILE);
     });
 
     server.on("/cleanup", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -490,7 +474,7 @@ void setupHTTPServer() {
         request->send(200);
     });
 
-    server.on("/secureflash", HTTP_GET, [](AsyncWebServerRequest *request){
+    server.on("/flash/secure/fpga", HTTP_GET, [](AsyncWebServerRequest *request){
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
@@ -579,7 +563,9 @@ void setupHTTPServer() {
         root["firmware_format"] = firmwareFormat;
         root["http_auth_user"] = httpAuthUser;
         root["http_auth_pass"] = httpAuthPass;
-        
+        root["flash_chip_size"] = ESP.getFlashChipSize();
+        root["fw_version"] = "1.2.0";
+
         root.printTo(*response);
         request->send(response);
     });
@@ -590,6 +576,12 @@ void setupHTTPServer() {
         }
         ESP.eraseConfig();
         ESP.restart();
+    });
+
+    server.on("/test", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
     });
 
     AsyncStaticWebHandler* handler = &server
@@ -603,7 +595,14 @@ void setupHTTPServer() {
 
 void setupSPIFFS() {
     DBG_OUTPUT_PORT.printf(">> Setting up SPIFFS...\n");
-    SPIFFS.begin();
+    if (!SPIFFS.begin()) {
+        DBG_OUTPUT_PORT.printf(">> SPIFFS begin failed, trying to format...");
+        if (SPIFFS.format()) {
+            DBG_OUTPUT_PORT.printf("done.\n");
+        } else {
+            DBG_OUTPUT_PORT.printf("error.\n");
+        }
+    }
     {
         FSInfo fs_info;
         SPIFFS.info(fs_info);
