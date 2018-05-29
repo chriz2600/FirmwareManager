@@ -1,16 +1,16 @@
 #!/bin/bash
 
-set -x
 set -e
 
-echo "prepare index.html ..."
+faketty() {
+    if [ "$(uname)" == "Darwin" ] ; then
+	"$@"
+    else
+	script -qfc "$(printf "%q " "$@")" /dev/null
+    fi
+}
 
 cd $(dirname $0)/..
 
-env
-ipcs -lm
-
-inliner -debug -m data.in/index.html > data/index.html
+faketty inliner -m data.in/index.html > data/index.html
 gzip -n -f -9 data/index.html
-
-echo "... done!"
