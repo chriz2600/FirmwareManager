@@ -1,12 +1,15 @@
 #!/bin/bash
 
+set -x
+
 echo "prepare index.html ..."
+env
 
 # npm install -g inliner
 
 cd $(dirname $0)/..
 
 inliner -m data.in/index.html > data/index.html
-gzip -f -9 data/index.html
+gzip -n -f -9 data/index.html
 
 echo "... done!"
