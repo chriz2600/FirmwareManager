@@ -4,6 +4,8 @@
 #define DBG_OUTPUT_PORT Serial
 #define FIRMWARE_FILE "/firmware.dc"
 #define FIRMWARE_EXTENSION "dc"
+#define ESP_FIRMWARE_FILE "/firmware.bin"
+#define ESP_FIRMWARE_EXTENSION "bin"
 #define PAGES 8192 // 8192 pages x 256 bytes = 2MB = 16MBit
 #define DEBUG true
 
@@ -13,5 +15,6 @@
 #define ERROR_WRONG_MAGIC 16
 #define ERROR_WRONG_VERSION 17
 #define ERROR_FILE 18
+#define ERROR_FILE_SIZE 19
 
 #endif

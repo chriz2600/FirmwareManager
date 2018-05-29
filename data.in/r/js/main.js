@@ -3,6 +3,8 @@ keyboardeventKeyPolyfill.polyfill();
 
 var FIRMWARE_FILE = "/firmware.dc";
 var FIRMWARE_EXTENSION = "dc";
+var ESP_FIRMWARE_FILE = "/firmware.bin";
+var ESP_FIRMWARE_EXTENSION = "bin";
 
 function typed(finish_typing) {
     return function(term, message, delay, finish) {
@@ -148,13 +150,21 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             getConfig(false, downloadFile);
         });
+    } else if (command.match(/^\s*downloadesp\s*$/)) {
+        startTransaction(null, function() {
+            getConfig(false, downloadESP);
+        });
     } else if (command.match(/^\s*secureflash\s*$/)) {
         startTransaction(null, function() {
-            flash(true);
+            flashFPGA(true);
         });
     } else if (command.match(/^\s*flash\s*$/)) {
         startTransaction(null, function() {
-            flash();
+            flashFPGA();
+        });
+    } else if (command.match(/^\s*flashesp\s*$/)) {
+        startTransaction(null, function() {
+            flashESP();
         });
     } else if (command.match(/^\s*reset\s*$/)) {
         startTransaction(null, function() {
@@ -403,6 +413,9 @@ var setupDataMapping = {
 function setupDataDisplayToString(data, isSafe) {
     var value = " \n";
     for (x in data) {
+        if (x == "flash_chip_size" || x == "fw_version") {
+            continue;
+        }
         var t = setupDataMapping[x][0] || x;
         value += t + ": " 
             + (
@@ -559,7 +572,7 @@ function checkSetupStatus() {
     });
 }
 
-function _getMD5File() {
+function _getFPGAMD5File() {
     return (
           "//" + currentConfigData["firmware_server"]
         + "/fw/" + currentConfigData["firmware_version"]
@@ -569,12 +582,22 @@ function _getMD5File() {
     );
 }
 
+function _getESPMD5File() {
+    return (
+          "//esp.i74.de"
+        + "/" + currentConfigData["firmware_version"]
+        + "/" + currentConfigData["flash_chip_size"] / 1024 / 1024 + "MB"
+        + "-" + "firmware"
+        + "." + ESP_FIRMWARE_EXTENSION + ".md5?cc=" + Math.random()
+    );
+}
+
 function getFirmwareData() {
     $.ajax("/etc/last_flash_md5").done(function (data) {
         var lastFlashMd5 = $.trim(data);
         $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
             var stagedMd5 = $.trim(data);
-            $.ajax(_getMD5File()).done(function (data) {
+            $.ajax(_getFPGAMD5File()).done(function (data) {
                 var origMd5 = $.trim(data);
                 endTransaction(
                     'Installed firmware:\n'
@@ -602,7 +625,7 @@ function getFirmwareData() {
 function checkFirmware() {
     $.ajax("/etc/last_flash_md5").done(function (data) {
         var lastFlashMd5 = $.trim(data);
-        $.ajax(_getMD5File()).done(function (data) {
+        $.ajax(_getFPGAMD5File()).done(function (data) {
             var origMd5 = $.trim(data);
             if (lastFlashMd5 == origMd5) {
                 endTransaction('Currently installed firmware is already the latest version.');
@@ -647,14 +670,22 @@ function doProgress(successCallback) {
 }
 
 function downloadFile() {
+    download("/download/fpga", FIRMWARE_FILE, _getFPGAMD5File());
+}
+
+function downloadESP() {
+    download("/download/esp", ESP_FIRMWARE_FILE, _getESPMD5File());
+}
+
+function download(uri, file, origMD5File) {
     //startSpinner(term, spinners["shark"]);
     term.set_prompt(progress(0, progressSize));
-    $.ajax("/download").done(function (data) {
+    $.ajax(uri).done(function (data) {
         doProgress(
             function() {
-                $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
+                $.ajax(file + ".md5").done(function (data) {
                     var calcMd5 = $.trim(data);
-                    $.ajax(_getMD5File()).done(function (data) {
+                    $.ajax(origMD5File).done(function (data) {
                         var origMd5 = $.trim(data);
                         endTransactionWithMD5Check(calcMd5, origMd5, "Please try to re-download file.");
                     }).fail(function() {
@@ -670,15 +701,31 @@ function downloadFile() {
     });
 }
 
-function flash(secure) {
+function flashFPGA(secure) {
+    flash(
+        (secure ? "/flash/secure/fpga" : "/flash/fpga"),
+        FIRMWARE_FILE,
+        "/etc/last_flash_md5"
+    );
+}
+
+function flashESP() {
+    flash(
+        "/flash/esp",
+        ESP_FIRMWARE_FILE,
+        "/etc/last_esp_flash_md5"
+    );
+}
+
+function flash(uri, file, md5File) {
     //startSpinner(term, spinners["shark"]);
     term.set_prompt(progress(0, progressSize));
-    $.ajax(secure ? "/secureflash" : "/flash").done(function (data) {
+    $.ajax(uri).done(function (data) {
         doProgress(
             function() {
-                $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
+                $.ajax(file + ".md5").done(function (data) {
                     var calcMd5 = $.trim(data);
-                    $.ajax("/etc/last_flash_md5").done(function (data) {
+                    $.ajax(md5File).done(function (data) {
                         var lastFlashMd5 = $.trim(data);
                         endTransactionWithMD5Check(calcMd5, lastFlashMd5, "Please try to re-flash.");
                     }).fail(function() {

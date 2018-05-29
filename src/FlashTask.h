@@ -2,14 +2,12 @@
 #include <Task.h>
 #include <fastlz.h>
 
-extern int totalLength;
-extern int readLength;
-extern unsigned int page;
-extern int prevPercentComplete;
-extern bool finished;
 extern MD5Builder md5;
 extern File flashFile;
 extern SPIFlash flash;
+
+extern int totalLength;
+extern int readLength;
 extern int last_error;
 
 void reverseBitOrder(uint8_t *buffer);
@@ -18,10 +16,10 @@ void _readFile(const char *filename, char *target, unsigned int len);
 
 extern TaskManager taskManager;
 
-class TaskFlash : public Task {
+class FlashTask : public Task {
 
     public:
-        TaskFlash(uint8_t v) :
+        FlashTask(uint8_t v) :
             Task(1),
             dummy(v)
         { };
@@ -36,10 +34,11 @@ class TaskFlash : public Task {
         size_t bytes_in_result = 0;
         size_t block_size = 1536;
         int chunk_size = 0;
+        unsigned int page;
+        int prevPercentComplete;
 
         virtual bool OnStart() {
             page = 0;
-            finished = false;
             totalLength = -1;
             readLength = 0;
             prevPercentComplete = -1;
@@ -91,7 +90,6 @@ class TaskFlash : public Task {
         }
 
         virtual void OnUpdate(uint32_t deltaTime) {
-            int _read = 0;
             if (!flash.is_busy_async()) {
                 if (page >= PAGES || doFlash() == -1) {
                     taskManager.StopTask(this);
@@ -160,7 +158,6 @@ class TaskFlash : public Task {
             md5.calculate();
             String md5sum = md5.toString();
             _writeFile("/etc/last_flash_md5", md5sum.c_str(), md5sum.length());
-            finished = true;
             if (buffer != NULL)
                 free(buffer);
             // make sure pointer is reset to original start

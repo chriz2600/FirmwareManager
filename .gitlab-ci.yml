@@ -2,6 +2,7 @@
 firmware:
   stage: build
   script:
+    - "./local/prepare-index-html"
     - "pio run"
     - "pio run -t buildfs"
     - "mkdir -p /srv/esp/${CI_COMMIT_REF_NAME}"
@@ -10,12 +11,14 @@ firmware:
     - "cp .pioenvs/esp07/spiffs.bin /srv/esp/${CI_COMMIT_REF_NAME}/1MB-spiffs.bin"
     - "cp .pioenvs/esp07s/firmware.bin /srv/esp/${CI_COMMIT_REF_NAME}/4MB-firmware.bin"
     - "cp .pioenvs/esp07s/spiffs.bin /srv/esp/${CI_COMMIT_REF_NAME}/4MB-spiffs.bin"
+    - "cp data/index.html.gz /srv/esp/${CI_COMMIT_REF_NAME}/esp.index.html.gz"
   artifacts:
     paths:
     - .pioenvs/esp07/firmware.bin
     - .pioenvs/esp07/spiffs.bin
     - .pioenvs/esp07s/firmware.bin
     - .pioenvs/esp07s/spiffs.bin
+    - data/index.html.gz
   tags:
     - platformio
 
