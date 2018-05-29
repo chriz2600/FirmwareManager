@@ -3,8 +3,7 @@
 set -x
 
 echo "prepare index.html ..."
-env
-
+export TERM=xterm
 # npm install -g inliner
 
 cd $(dirname $0)/..
