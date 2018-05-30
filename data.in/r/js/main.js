@@ -4,7 +4,37 @@ keyboardeventKeyPolyfill.polyfill();
 var FIRMWARE_FILE = "/firmware.dc";
 var FIRMWARE_EXTENSION = "dc";
 var ESP_FIRMWARE_FILE = "/firmware.bin";
+var ESP_INDEX_STAGING_FILE = "/esp.index.html.gz";
 var ESP_FIRMWARE_EXTENSION = "bin";
+
+var process = {};
+process.nextTick = (function () {
+    var canSetImmediate = typeof window !== 'undefined' && window.setImmediate;
+    var canPost = typeof window !== 'undefined' && window.postMessage && window.addEventListener;
+    if (canSetImmediate) {
+	return function (f) { return window.setImmediate(f) };
+    }
+    if (canPost) {
+	var queue = [];
+	window.addEventListener('message', function (ev) {
+	    var source = ev.source;
+	    if ((source === window || source === null) && ev.data === 'process-tick') {
+		ev.stopPropagation();
+		if (queue.length > 0) {
+		    var fn = queue.shift();
+		    fn();
+		}
+	    }
+	}, true);
+	return function nextTick(fn) {
+	    queue.push(fn);
+	    window.postMessage('process-tick', '*');
+	};
+    }
+    return function nextTick(fn) {
+	setTimeout(fn, 0);
+    };
+})();
 
 function typed(finish_typing) {
     return function(term, message, delay, finish) {
@@ -14,23 +44,29 @@ function typed(finish_typing) {
         if (message.length > 0) {
             term.set_prompt('');
             var new_prompt = '';
-            var interval = setInterval(function() {
+	    var looper = function() {
                 var chr = $.terminal.substring(message, c, c+1);
                 new_prompt += chr;
                 term.set_prompt(new_prompt);
                 c++;
                 if (c == length(message)) {
-                    clearInterval(interval);
                     // execute in next interval
                     setTimeout(function() {
-                        // swap command with prompt
-                        finish_typing(term, message, prompt);
+		        // swap command with prompt
+			finish_typing(term, message, prompt);
                         anim = false
-                        finish && finish();
-                    }, delay);
-                }
+			finish && finish();
+		    }, delay);
+                } else {
+		    if (delay == 0) {
+			process.nextTick(looper);
+		    } else {
+			setTimeout(looper, delay);
+		    }
+		}
                 $('#term').scrollTop($('#term').prop('scrollHeight'));
-            }, delay);
+            };
+            setTimeout(looper, delay);
         }
     };
 }
@@ -76,7 +112,7 @@ function startTransaction(msg, action) {
         msg = msg.msg || "";
     }
     if (msg) {
-        typed_message(term, msg, 1, function() {
+        typed_message(term, msg, 0, function() {
             finish = true;
         });
     } else {
@@ -129,6 +165,10 @@ var term = $('#term').terminal(function(command, term) {
         term.disable();
     } else if (command.match(/^\s*help\s*$/)) {
         help(true);
+    } else if (command.match(/^\s*ls\s*$/)) {
+        startTransaction(null, function() {
+        listFiles();
+    });
     } else if (command.match(/^\s*select\s*$/)) {
         startTransaction("Please select file to upload...", function() {
             $('#fileInput').click();
@@ -146,25 +186,33 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             uploadFile();
         });
-    } else if (command.match(/^\s*download\s*$/)) {
+    } else if (command.match(/^\s*downloadfpga\s*$/)) {
         startTransaction(null, function() {
-            getConfig(false, downloadFile);
+            getConfig(false, downloadFPGA);
         });
     } else if (command.match(/^\s*downloadesp\s*$/)) {
         startTransaction(null, function() {
             getConfig(false, downloadESP);
         });
+    } else if (command.match(/^\s*downloadindex\s*$/)) {
+        startTransaction(null, function() {
+   	    getConfig(false, downloadESPIndex);
+	});
     } else if (command.match(/^\s*secureflash\s*$/)) {
         startTransaction(null, function() {
             flashFPGA(true);
         });
-    } else if (command.match(/^\s*flash\s*$/)) {
+    } else if (command.match(/^\s*flashfpga\s*$/)) {
         startTransaction(null, function() {
             flashFPGA();
         });
     } else if (command.match(/^\s*flashesp\s*$/)) {
         startTransaction(null, function() {
             flashESP();
+        });
+    } else if (command.match(/^\s*flashindex\s*$/)) {
+        startTransaction(null, function() {
+            flashESPIndex();
         });
     } else if (command.match(/^\s*reset\s*$/)) {
         startTransaction(null, function() {
@@ -202,6 +250,8 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             getFlashChipSize();
         });
+    } else if (command.match(/^\s*download\s*$/)) {
+        downloadall(0);
     } else if (command.match(/^\s*details\s*$/)) {
         helpDetails();
     } else if (command.match(/^\s*banner\s*$/)) {
@@ -219,7 +269,7 @@ var term = $('#term').terminal(function(command, term) {
     exit: false,
     onInit: function(term) {
         set_size();
-        typed_message(term, 'Type [[b;#fff;]help] to get help!\n', 36, function() {
+        typed_message(term, 'Type [[b;#fff;]help] to get help!', 36, function() {
             startTransaction(null, function() {
                 checkSetupStatus();
             });
@@ -243,6 +293,7 @@ var term = $('#term').terminal(function(command, term) {
         "banner",
         "restart",
         "cleanup",
+        "ls",
         "exit"
     ],
     prompt: 'dc-hdmi> ',
@@ -290,7 +341,7 @@ function helpDetails() {
         + "   (from           | dc.i74.de |\n"
         + "     HD)           \\___________/\n"
         + " \n";
-    typed_message(term, msg, 1);
+    typed_message(term, msg, 0);
 }
 
 function help(full) {
@@ -330,9 +381,10 @@ function help(full) {
     msg += "[[b;#fff;]clear]:       clear terminal screen\n";
     msg += "[[b;#fff;]restart]:     restarts ESP module\n";
     msg += "[[b;#fff;]cleanup]:     remove staged firmware file\n";
+    msg += "[[b;#fff;]ls]:          list files\n";
     msg += "[[b;#fff;]exit]:        end terminal\n";
 
-    typed_message(term, msg, 1);
+    typed_message(term, msg, 0);
 }
 
 function progress(percent, width) {
@@ -409,11 +461,15 @@ var setupDataMapping = {
     http_auth_user:   [ "HTTP User        ", "Test" ],
     http_auth_pass:   [ "HTTP Password    ", "testtest" ]
 };
+var dataExcludeMap = {
+    "flash_chip_size":"", 
+    "fw_version":""
+};
 
 function setupDataDisplayToString(data, isSafe) {
     var value = " \n";
     for (x in data) {
-        if (x == "flash_chip_size" || x == "fw_version") {
+        if (x in dataExcludeMap) {
             continue;
         }
         var t = setupDataMapping[x][0] || x;
@@ -453,6 +509,52 @@ function restartESP() {
 function doDeleteFirmwareFile() {
     $.ajax("/cleanup");
     endTransaction('firmware file removed.');
+}
+
+function listFiles() {
+    $.ajax("/list-files").done(function (data) {
+        endTransaction(createListing(data));
+    }).fail(function() {
+        endTransaction('Error listing files.', true);
+    });
+}
+
+String.prototype.paddingLeft = function(paddingValue) {
+    return String(paddingValue + this).slice(-paddingValue.length);
+};
+
+String.prototype.paddingRight = function(paddingValue) {
+    return String(this + paddingValue).substring(0, paddingValue.length);
+};
+
+function createListing(data) {
+    var msg = "";
+    var maxFilenameLen = 0;
+
+    data.files.sort(function(a, b){
+        return (
+            (a.size > b.size) 
+            ? -1 
+            : (
+                (a.size < b.size) 
+                ? 1 
+                : (a.name < b.name ? -1 : (a.name > b.name ? 1 : 0))
+            )
+        );
+    });
+
+    for (x in data.files) {
+        var name = data.files[x].name;
+        msg += (""+data.files[x].size).paddingLeft("       ") + " " + name + "\n";
+        if (name.length > maxFilenameLen) maxFilenameLen = name.length;
+    }
+    return (
+       "Size    Filename\n"
+       + Array(maxFilenameLen + 9).join('-') + "\n"
+       + msg
+       + Array(maxFilenameLen + 9).join('-') + "\n"
+       + data.usedBytes + " of " + data.totalBytes + " bytes used\n"
+    );
 }
 
 function getFlashChipSize() {
@@ -561,7 +663,11 @@ function checkSetupStatus() {
     $.ajax("/issetupmode").done(function (data) {
         var setupStatus = $.trim(data);
         if (setupStatus === "false") {
-            endTransaction();
+            endTransaction(null, null, function() { 
+                getConfig(false, function() {
+                    typed_message(term, "Firmware version: [[b;#fff;]" + currentConfigData["fw_version"] + "]\n", 36);
+                }); 
+            });
         } else {
             endTransaction(null, null, function() { 
                 getConfig(false, setupMode); 
@@ -591,6 +697,15 @@ function _getESPMD5File() {
         + "." + ESP_FIRMWARE_EXTENSION + ".md5?cc=" + Math.random()
     );
 }
+
+function _getESPIndexMD5File() {
+    return (
+          "//esp.i74.de"
+	+ "/" + currentConfigData["firmware_version"]
+        + "/" + ESP_INDEX_STAGING_FILE + ".md5?cc=" + Math.random()
+    );
+}
+
 
 function getFirmwareData() {
     $.ajax("/etc/last_flash_md5").done(function (data) {
@@ -669,15 +784,58 @@ function doProgress(successCallback) {
     setTimeout(progressPoll, 1500);
 }
 
-function downloadFile() {
-    download("/download/fpga", FIRMWARE_FILE, _getFPGAMD5File());
+function downloadall(step) {
+    switch(step) {
+        case 0:
+            startTransaction(null, function() {
+                getConfig(false, function() {
+                    downloadall(step + 1);
+                });
+            });
+            break;
+        case 1:
+            term.echo("[[b;#fff;]Step 1/3:] FPGA firmware");
+            startTransaction(null, function() {
+                downloadFPGA(function() {
+                    downloadall(step + 1);
+                });
+            });
+            break;
+        case 2:
+            term.echo("[[b;#fff;]Step 2/3:] ESP firmware");
+            startTransaction(null, function() {
+                downloadESP(function() {
+                    downloadall(step + 1);
+                });
+            });
+            break;
+        case 3:
+            term.echo("[[b;#fff;]Step 3/3:] ESP index.html");
+            startTransaction(null, function() {
+                downloadESPIndex(function() {
+                    downloadall(step + 1);
+                });
+            });
+            break;
+        default:
+            endTransaction("[[b;#fff;]Done!]\n");
+            break;
+    }
 }
 
-function downloadESP() {
-    download("/download/esp", ESP_FIRMWARE_FILE, _getESPMD5File());
+function downloadFPGA(successCallback) {
+    download("/download/fpga", FIRMWARE_FILE, _getFPGAMD5File(), successCallback);
 }
 
-function download(uri, file, origMD5File) {
+function downloadESP(successCallback) {
+    download("/download/esp", ESP_FIRMWARE_FILE, _getESPMD5File(), successCallback);
+}
+
+function downloadESPIndex(successCallback) {
+    download("/download/index", ESP_INDEX_STAGING_FILE, _getESPIndexMD5File(), successCallback);
+}
+
+function download(uri, file, origMD5File, successCallback) {
     //startSpinner(term, spinners["shark"]);
     term.set_prompt(progress(0, progressSize));
     $.ajax(uri).done(function (data) {
@@ -687,7 +845,7 @@ function download(uri, file, origMD5File) {
                     var calcMd5 = $.trim(data);
                     $.ajax(origMD5File).done(function (data) {
                         var origMd5 = $.trim(data);
-                        endTransactionWithMD5Check(calcMd5, origMd5, "Please try to re-download file.");
+                        endTransactionWithMD5Check(calcMd5, origMd5, "Please try to re-download file.", successCallback);
                     }).fail(function() {
                         endTransaction('Error reading original checksum', true);
                     });
@@ -717,6 +875,14 @@ function flashESP() {
     );
 }
 
+function flashESPIndex() {
+    flash(
+        "/flash/index",
+        ESP_INDEX_STAGING_FILE,
+        "/index.html.gz.md5"
+    );
+}
+
 function flash(uri, file, md5File) {
     //startSpinner(term, spinners["shark"]);
     term.set_prompt(progress(0, progressSize));
@@ -741,13 +907,15 @@ function flash(uri, file, md5File) {
     });
 }
 
-function endTransactionWithMD5Check(chk1, chk2, msg) {
+function endTransactionWithMD5Check(chk1, chk2, msg, cb) {
     endTransaction(
         progress(100, progressSize) + ' [[b;green;]OK]\n'
         + "MD5 Check:\n"
         + (chk1 == chk2
             ? "    " + chk1 + "\n == " + chk2 + " [[b;green;]OK]"
             : "    " + chk1 + "\n[[b;red;] != ]" + chk2 + " [[b;red;]FAIL]")
-        + (chk1 == chk2 ? "" : "\n" + msg)
+        + (chk1 == chk2 ? "" : "\n" + msg), 
+        null, 
+        (chk1 == chk2 ? cb : null)
     );
 }

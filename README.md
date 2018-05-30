@@ -1,14 +1,10 @@
 # Firmware Manager for DreamcastHDMI / DCHDMI
 
-This was designed to provide an easy way to upgrade the firmware of the DreamcastHDMI/DCHDMI project using an [ESP-07][esp07], but it should be easily adapted to other projects, where a SPI Flash should be programmed (in a failsafe manner, as the ESP-07(S) firmware is not altered).
+This was designed to provide an easy way to upgrade the firmware of the DreamcastHDMI/DCHDMI project using an **ESP-07S**, but it should be easily adapted to other projects, where a SPI Flash should be programmed (in a failsafe manner, as the ESP-07S firmware is not altered).
 
-##### Why ESP-07(S)? Why not use ESP-12e?
+##### Why ESP-07S? Why not use ESP-12e?
 
-The ESP is operating inside the dreamcast's metal shielding, so it is necassary to mount the antenna outside of this. In order to avoid wifi signals inside the metal shield, one component has to be removed. This disables the on board antenna:
-
-![ESP-07 disable on board antenna](https://raw.githubusercontent.com/chriz2600/FirmwareManager/master/misc/ESP-07.jpg)
-
-Another very nice option is the ESP-07S, which comes without an external antenna. It usually also has 4MB instead of 1MB of flash memory.
+The ESP is operating inside the dreamcast's metal shielding, so it is necassary to mount the antenna outside of this. A perfect match for this is the ESP-07S, which comes without an external antenna. It usually also has 4MB instead of 1MB of flash memory.
 
 ![ESP-07S on DCHDMI](https://raw.githubusercontent.com/chriz2600/FirmwareManager/master/misc/esp07s_2.jpg)
 
@@ -31,7 +27,7 @@ After connecting to [URL](http://192.168.4.1), you will be guided through the se
 
 **Be sure to set the "OTA Password" to be able to upload a newer ESP firmware "over the air" in the future!**
 
-Restart the ESP-07(S) after setup is done with the command `restart`. If SSID and password are correct the Firmware Manager should now be connected to your local WiFi network.
+Restart the ESP-07S after setup is done with the command `restart`. If SSID and password are correct the Firmware Manager should now be connected to your local WiFi network.
 
 ## Connecting to module after setup:
 
@@ -42,14 +38,14 @@ Just type "help" and "details" to get information about how to upgrade firmware.
 
 [dc-fw-manager.i74.de][dcfwdemo]
 
-## To build ESP-07(S) firmware:
+## To build ESP-07S firmware:
 
 - To build you need platformio:
 
 | Command | Comment |
 |-|-|
 | `pio run` | to build |
-| `pio upload` | to upload to ESP-07(S) (remember to check upload related settings in platformio.ini) |
+| `pio upload` | to upload to ESP-07S (remember to check upload related settings in platformio.ini) |
 
 ## To create inlined index.html:
 
@@ -76,28 +72,21 @@ The firmware is divided into 2 parts, one (firmware.bin) is the actual firmware,
 
 #### First time flash:
 
-To flash the firmware/filesystem image the ESP-07(S) must be booted into serial programming mode.
+To flash the firmware/filesystem image the ESP-07S must be booted into serial programming mode.
 
 See [ESP8266 Boot Mode Selection](https://github.com/espressif/esptool/wiki/ESP8266-Boot-Mode-Selection) for details.
 
 If you have to program more than one ESP [this](https://www.tindie.com/products/petl/esp12-programmer-board-with-pogo-pins/) might come in handy.
 
 ```
-# esp07 (1MB flash) 
-esptool.py -p <serial_port> write_flash 0x00000000 firmware.bin 0x000BB000 spiffs.bin
-# esp07s (4MB flash)
 esptool.py -p <serial_port> write_flash 0x00000000 firmware.bin 0x00100000 spiffs.bin
 
 serial_port: 
     e.g. COM5 on windows, /dev/cu.usbserial-A50285BI on OSX.
 
 # or 
-# esp07
-pio run -t upload -e esp07
-pio run -t uploadfs -e esp07
-# esp07s
-pio run -t upload -e esp07s
-pio run -t uploadfs -e esp07s
+pio run -t upload
+pio run -t uploadfs
 
 platformio.ini:
     upload_port = /dev/cu.usbserial-A50285BI

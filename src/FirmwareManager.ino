@@ -17,6 +17,7 @@
 #include <Task.h>
 #include "FlashTask.h"
 #include "FlashESPTask.h"
+#include "FlashESPIndexTask.h"
 
 char ssid[64];
 char password[64];
@@ -46,6 +47,7 @@ MD5Builder md5;
 TaskManager taskManager;
 FlashTask FlashTask(1);
 FlashESPTask FlashESPTask(1);
+FlashESPIndexTask FlashESPIndexTask(1);
 
 int totalLength;
 int readLength;
@@ -209,6 +211,15 @@ void handleESPFlash(AsyncWebServerRequest *request, const char *filename) {
     }
 }
 
+void handleESPIndexFlash(AsyncWebServerRequest *request) {
+    if (SPIFFS.exists(ESP_INDEX_STAGING_FILE)) {
+        taskManager.StartTask(&FlashESPIndexTask);
+        request->send(200);
+    } else {
+        request->send(404);
+    }
+}
+
 void handleFPGADownload(AsyncWebServerRequest *request) {
     String httpGet = "GET /fw/" 
         + String(firmwareVersion) 
@@ -229,6 +240,15 @@ void handleESPDownload(AsyncWebServerRequest *request) {
         + " HTTP/1.0\r\nHost: esp.i74.de\r\n\r\n";
 
     _handleDownload(request, ESP_FIRMWARE_FILE, httpGet);
+}
+
+void handleESPIndexDownload(AsyncWebServerRequest *request) {
+    String httpGet = "GET /"
+        + String(firmwareVersion)
+        + "/esp.index.html.gz"
+        + " HTTP/1.0\r\nHost: esp.i74.de\r\n\r\n";
+
+    _handleDownload(request, ESP_INDEX_STAGING_FILE, httpGet);
 }
 
 void _handleDownload(AsyncWebServerRequest *request, const char *filename, String httpGet) {
@@ -438,6 +458,41 @@ void setupHTTPServer() {
         handleUpload(request, "/index.html.gz", index, data, len, final);
     });
 
+    server.on("/list-files", HTTP_GET, [](AsyncWebServerRequest *request){
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+
+        AsyncResponseStream *response = request->beginResponseStream("text/json");
+        DynamicJsonBuffer jsonBuffer;
+        JsonObject &root = jsonBuffer.createObject();
+
+        FSInfo fs_info;
+        SPIFFS.info(fs_info);
+
+        root["totalBytes"] = fs_info.totalBytes;
+        root["usedBytes"] = fs_info.usedBytes;
+        root["blockSize"] = fs_info.blockSize;
+        root["pageSize"] = fs_info.pageSize;
+        root["maxOpenFiles"] = fs_info.maxOpenFiles;
+        root["maxPathLength"] = fs_info.maxPathLength;
+        root["freeSketchSpace"] = ESP.getFreeSketchSpace();
+        root["maxSketchSpace"] = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+        root["flashChipSize"] = ESP.getFlashChipSize();
+
+        JsonArray &datas = root.createNestedArray("files");
+
+        Dir dir = SPIFFS.openDir("/");
+        while (dir.next()) {
+        JsonObject &data = datas.createNestedObject();
+            data["name"] = dir.fileName();
+            data["size"] = dir.fileSize();
+        }
+
+        root.printTo(*response);
+        request->send(response);
+    });
+
     server.on("/download/fpga", HTTP_GET, [](AsyncWebServerRequest *request){
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
@@ -450,6 +505,13 @@ void setupHTTPServer() {
             return request->requestAuthentication();
         }
         handleESPDownload(request);
+    });
+
+    server.on("/download/index", HTTP_GET, [](AsyncWebServerRequest *request){
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        handleESPIndexDownload(request);
     });
 
     server.on("/flash/fpga", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -466,11 +528,23 @@ void setupHTTPServer() {
         handleESPFlash(request, ESP_FIRMWARE_FILE);
     });
 
+    server.on("/flash/index", HTTP_GET, [](AsyncWebServerRequest *request){
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        handleESPIndexFlash(request);
+    });
+
     server.on("/cleanup", HTTP_GET, [](AsyncWebServerRequest *request) {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
         SPIFFS.remove(FIRMWARE_FILE);
+        SPIFFS.remove(ESP_FIRMWARE_FILE);
+        SPIFFS.remove(ESP_INDEX_STAGING_FILE);
+        SPIFFS.remove(String(FIRMWARE_FILE) + ".md5");
+        SPIFFS.remove(String(ESP_FIRMWARE_FILE) + ".md5");
+        SPIFFS.remove(String(ESP_INDEX_STAGING_FILE) + ".md5");
         request->send(200);
     });
 
