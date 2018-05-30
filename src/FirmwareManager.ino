@@ -638,7 +638,7 @@ void setupHTTPServer() {
         root["http_auth_user"] = httpAuthUser;
         root["http_auth_pass"] = httpAuthPass;
         root["flash_chip_size"] = ESP.getFlashChipSize();
-        root["fw_version"] = "1.2.0";
+        root["fw_version"] = FW_VERSION;
 
         root.printTo(*response);
         request->send(response);

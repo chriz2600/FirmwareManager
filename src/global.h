@@ -22,4 +22,6 @@
 #define ERROR_FILE 18
 #define ERROR_FILE_SIZE 19
 
+#define FW_VERSION "__FW_VERSION__"
+
 #endif
