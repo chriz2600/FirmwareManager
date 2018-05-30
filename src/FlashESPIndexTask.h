@@ -57,7 +57,7 @@ class FlashESPIndexTask : public Task {
                     taskManager.StopTask(this);
                 } else {
                     md5.add(buffer, bytes_read);
-                    targetFile.write(buffer, BUFFER_SIZE);
+                    targetFile.write(buffer, bytes_read);
                 }
             } else {
                 taskManager.StopTask(this);
