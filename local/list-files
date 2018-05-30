@@ -1,4 +1,4 @@
 #!/bin/bash
 
 curl --basic --user Test:testtest \
-    -s "http://dc-firmware-manager.local/list?dir=/" | jq .
+    -s "http://dc-firmware-manager.local/list-files" | jq .

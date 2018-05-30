@@ -3,7 +3,7 @@ firmware:
   stage: build
   script:
     - "./local/prepare-index-html"
-    - "sed -i -e 's:__FW_VERSION__:'${CI_COMMIT_REF_NAME}':g' src/global.h"
+    - "./local/prepare-fw-version"
     - "pio run"
     - "pio run -t buildfs"
     - "mkdir -p /srv/esp/${CI_COMMIT_REF_NAME}"
