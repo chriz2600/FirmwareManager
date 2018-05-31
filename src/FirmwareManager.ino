@@ -440,7 +440,7 @@ void writeSetupParameter(AsyncWebServerRequest *request, const char* param, char
 void setupHTTPServer() {
     DBG_OUTPUT_PORT.printf(">> Setting up HTTP server...\n");
 
-    server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){
+    server.on("/upload/fpga", HTTP_POST, [](AsyncWebServerRequest *request){
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
@@ -449,13 +449,22 @@ void setupHTTPServer() {
         handleUpload(request, FIRMWARE_FILE, index, data, len, final);
     });
 
-    server.on("/upload-index", HTTP_POST, [](AsyncWebServerRequest *request){
+    server.on("/upload/esp", HTTP_POST, [](AsyncWebServerRequest *request){
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
         request->send(200);
     }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-        handleUpload(request, "/index.html.gz", index, data, len, final);
+        handleUpload(request, ESP_FIRMWARE_FILE, index, data, len, final);
+    });
+
+    server.on("/upload/index", HTTP_POST, [](AsyncWebServerRequest *request){
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        request->send(200);
+    }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+        handleUpload(request, ESP_INDEX_STAGING_FILE, index, data, len, final);
     });
 
     server.on("/list-files", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -533,6 +542,15 @@ void setupHTTPServer() {
             return request->requestAuthentication();
         }
         handleESPIndexFlash(request);
+    });
+
+    server.on("/cleanupindex", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        SPIFFS.remove(ESP_INDEX_FILE);
+        SPIFFS.remove(String(ESP_INDEX_FILE) + ".md5");
+        request->send(200);
     });
 
     server.on("/cleanup", HTTP_GET, [](AsyncWebServerRequest *request) {

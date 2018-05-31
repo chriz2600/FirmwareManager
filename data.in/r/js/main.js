@@ -182,9 +182,17 @@ var term = $('#term').terminal(function(command, term) {
                 setTimeout(waitForDialog, 350);
             }
         })();
-    } else if (command.match(/^\s*upload\s*$/)) {
+    } else if (command.match(/^\s*uploadfpga\s*$/)) {
         startTransaction(null, function() {
-            uploadFile();
+            uploadFPGA();
+        });
+    } else if (command.match(/^\s*uploadesp\s*$/)) {
+        startTransaction(null, function() {
+            uploadESP();
+        });
+    } else if (command.match(/^\s*uploadindex\s*$/)) {
+        startTransaction(null, function() {
+            uploadESPIndex();
         });
     } else if (command.match(/^\s*downloadfpga\s*$/)) {
         startTransaction(null, function() {
@@ -202,6 +210,8 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             flashFPGA(true);
         });
+    } else if (command.match(/^\s*flash\s*$/)) {
+        flashall(0);
     } else if (command.match(/^\s*flashfpga\s*$/)) {
         startTransaction(null, function() {
             flashFPGA();
@@ -222,13 +232,19 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             fileInputChange();
         });
-    } else if (command.match(/^\s*get\s*$/)) {
-        startTransaction(null, function() {
-            getConfig(false, getFirmwareData);
-        });
     } else if (command.match(/^\s*check\s*$/)) {
+        checkall(0);
+    } else if (command.match(/^\s*checkfpga\s*$/)) {
         startTransaction(null, function() {
-            getConfig(false, getFirmwareData);
+            getConfig(false, getFPGAFirmwareData);
+        });
+    } else if (command.match(/^\s*checkesp\s*$/)) {
+        startTransaction(null, function() {
+            getConfig(false, getESPFirmwareData);
+        });
+    } else if (command.match(/^\s*checkindex\s*$/)) {
+        startTransaction(null, function() {
+            getConfig(false, getESPIndexFirmwareData);
         });
     } else if (command.match(/^\s*restart\s*$/)) {
         startTransaction(null, function() {
@@ -350,28 +366,29 @@ function help(full) {
         msg = " \n"
             + "To [[b;#fff;]flash] the firmware, you have 2 options:\n"
             + " \n"
-            + "1) [[b;#fff;]select] a firmware from your harddisk and [[b;#fff;]upload] it\n"
+            + "1) [[b;#fff;]select] a firmware from your harddisk and [[b;#fff;]upload...] it\n"
             + "   to the staging area\n"
-            + "2) [[b;#fff;]download] the latest firmware from dc.i74.de to the\n"
-            + "   staging area\n"
+            + "2) [[b;#fff;]download] the latest firmware set from dc.i74.de to\n"
+            + "   the staging area\n"
             + " \n"
             + "After that, you are ready to [[b;#fff;]flash] the firmware to\n"
             + "the FPGA configuration memory. It's possible to re-flash\n"
             + "the firmware from the staging area at any time, because\n"
             + "it's stored in the flash of the WiFi chip.\n"
             + "Then type [[b;#fff;]reset] to reset the FPGA and load the previously\n"
-            + "flashed firmware.\n"
+            + "flashed FPGA firmware.\n"
+            + "Type [[b;#fff;]restart] to reset the ESP and start with the previously\n"
+            + "flashed ESP firmware.\n"
             + " \n"
             + "Type [[b;#fff;]details] to show a diagram of the upgrade procedure.\n"
             + " \n";
     }
     msg += "Commands:\n";
-    msg += "[[b;#fff;]get]:         get checksum of installed firmware\n";
     msg += "[[b;#fff;]check]:       check if new firmware is available\n";
     msg += "[[b;#fff;]select]:      select file to upload\n";
     msg += "[[b;#fff;]file]:        show information on selected file\n";
     msg += "[[b;#fff;]upload]:      upload selected file\n";
-    msg += "[[b;#fff;]download]:    download latest flash file from dc.i74.de\n";
+    msg += "[[b;#fff;]download]:    download latest firmware set\n";
     msg += "[[b;#fff;]flash]:       flash FPGA from staging area\n";
     msg += "[[b;#fff;]secureflash]: flash FPGA from staging area, while disabling fpga\n";
     msg += "[[b;#fff;]reset]:       reset FPGA\n";
@@ -402,7 +419,19 @@ function progress(percent, width) {
     return '[' + taken + left + '] ' + percent + '%';
 }
 
-function uploadFile(isRetry) {
+function uploadFPGA(isRetry) {
+    upload(false, "/upload/fpga", FIRMWARE_FILE);
+}
+
+function uploadESP(isRetry) {
+    upload(false, "/upload/esp", ESP_FIRMWARE_FILE);
+}
+
+function uploadESPIndex(isRetry) {
+    upload(false, "/upload/index", ESP_INDEX_STAGING_FILE);
+}
+
+function upload(isRetry, uri, dataFile, successCallback) {
     var file = $("#fileInput").get(0).files[0];
     if (!file) {
         endTransaction("No file selected!", true);
@@ -417,19 +446,19 @@ function uploadFile(isRetry) {
         if (isRetry) {
             endTransaction("Error during upload!", true);
         } else {
-            uploadFile(true);
+            upload(true, uri, dataFile, successCallback);
         }
     };
 
     client.onload = function(e) {
         if (client.status >= 200 && client.status < 400) {
-            $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
-                endTransactionWithMD5Check(lastMD5, data, "Please try to re-download file.");
+            $.ajax(dataFile + ".md5").done(function (data) {
+                endTransactionWithMD5Check(lastMD5, data, "Please try to re-upload.", successCallback);
             }).fail(function() {
                 endTransaction('Error reading checksum', true);
             });
         } else {
-            endTransaction('Error uploading file: ' + client.status, true);
+            endTransaction('Error uploading: ' + client.status, true);
         }
     };
 
@@ -444,7 +473,7 @@ function uploadFile(isRetry) {
 
     term.set_prompt(progress(0, progressSize));
 
-    client.open("POST", "/upload?size=" + file.size);
+    client.open("POST", uri + "?size=" + file.size);
     client.send(formData);
 }
 
@@ -706,26 +735,105 @@ function _getESPIndexMD5File() {
     );
 }
 
+function createCheckResult(lastFlashMd5, stagedMd5, origMd5, title) {
+    return '[[b;#fff;]'+title+']:\n'
+    + ' Installed: ' + (lastFlashMd5 == "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" ? "[[b;yellow;]No previously flashed version found]" : '[[b;#fff;]' + lastFlashMd5 + ']') + '\n'
+    + ' Staged:    ' + (stagedMd5 == "00000000000000000000000000000000" ? "[[b;yellow;]No staged version found]" : '[[b;#fff;]' + stagedMd5 + ']') + '\n'
+    + ' Official:  ' + '[[b;#fff;]' + origMd5 + ']\n'
+    + ' Result:    ' + ((lastFlashMd5 == origMd5)
+        ? 'Currently installed '+title+'\n            is already the latest version.'
+        : 'New '+title+' available.')
+    + '\n';
+}
 
-function getFirmwareData() {
-    $.ajax("/etc/last_flash_md5").done(function (data) {
+function checkall(step) {
+    switch(step) {
+        case 0:
+            startTransaction(null, function() {
+                getConfig(false, function() {
+                    checkall(step + 1);
+                });
+            });
+            break;
+        case 1:
+            startTransaction(null, function() {
+                getFPGAFirmwareData(function() {
+                    checkall(step + 1);
+                });
+            });
+            break;
+        case 2:
+            startTransaction(null, function() {
+                getESPFirmwareData(function() {
+                    checkall(step + 1);
+                });
+            });
+            break;
+        case 3:
+            startTransaction(null, function() {
+                getESPIndexFirmwareData(function() {
+                    checkall(step + 1);
+                });
+            });
+            break;
+        default:
+            break;
+    }
+}
+
+function getFPGAFirmwareData(successCallback) {
+    getFirmwareData(
+        "/etc/last_flash_md5",
+        FIRMWARE_FILE,
+        _getFPGAMD5File(),
+        function(lastFlashMd5, stagedMd5, origMd5) {
+            endTransaction(
+                createCheckResult(lastFlashMd5, stagedMd5, origMd5, "FPGA firmware"),
+                false,
+                successCallback
+            );
+        }
+    );
+}
+
+function getESPFirmwareData(successCallback) {
+    getFirmwareData(
+        "/etc/last_esp_flash_md5",
+        ESP_FIRMWARE_FILE,
+        _getESPMD5File(),
+        function(lastFlashMd5, stagedMd5, origMd5) {
+            endTransaction(
+                createCheckResult(lastFlashMd5, stagedMd5, origMd5, "ESP firmware"),
+                false,
+                successCallback
+            );
+        }
+    );
+}
+
+function getESPIndexFirmwareData(successCallback) {
+    getFirmwareData(
+        "/index.html.gz.md5",
+        ESP_INDEX_STAGING_FILE,
+        _getESPIndexMD5File(),
+        function(lastFlashMd5, stagedMd5, origMd5) {
+            endTransaction(
+                createCheckResult(lastFlashMd5, stagedMd5, origMd5, "ESP index.html"),
+                false,
+                successCallback
+            );
+        }
+    );
+}
+
+function getFirmwareData(lastMD5Uri, file, origMD5Uri, loadCallback) {
+    $.ajax(lastMD5Uri).done(function (data) {
         var lastFlashMd5 = $.trim(data);
-        $.ajax(FIRMWARE_FILE + ".md5").done(function (data) {
+        $.ajax(file + ".md5").done(function (data) {
             var stagedMd5 = $.trim(data);
-            $.ajax(_getFPGAMD5File()).done(function (data) {
+            $.ajax(origMD5Uri).done(function (data) {
                 var origMd5 = $.trim(data);
-                endTransaction(
-                    'Installed firmware:\n'
-                  + ' MD5: ' + (lastFlashMd5 == "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" ? "[[b;yellow;]No previously flashed firmware found]" : '[[b;#fff;]' + lastFlashMd5 + ']') + '\n'
-                  + 'Staged firmware:\n'
-                  + ' MD5: ' + (stagedMd5 == "00000000000000000000000000000000" ? "[[b;yellow;]No staged firmware found]" : '[[b;#fff;]' + stagedMd5 + ']') + '\n'
-                  + 'Official firmware:\n'
-                  + ' MD5: [[b;#fff;]' + origMd5 + ']\n'
-                  + '\n'
-                  + ((lastFlashMd5 == origMd5)
-                    ? 'Currently installed firmware is already the latest version.'
-                    : 'New firmware available.')
-                );
+                loadCallback(lastFlashMd5, stagedMd5, origMd5);
             }).fail(function() {
                 endTransaction('Error reading original checksum', true);
             });
@@ -784,6 +892,45 @@ function doProgress(successCallback) {
     setTimeout(progressPoll, 1500);
 }
 
+function flashall(step) {
+    switch(step) {
+        case 0:
+            startTransaction(null, function() {
+                getConfig(false, function() {
+                    flashall(step + 1);
+                });
+            });
+            break;
+        case 1:
+            term.echo("[[b;#fff;]Step 1/3:] Flashing FPGA firmware");
+            startTransaction(null, function() {
+                flashFPGA(false, function() {
+                    flashall(step + 1);
+                });
+            });
+            break;
+        case 2:
+            term.echo("[[b;#fff;]Step 2/3:] Flashing ESP firmware");
+            startTransaction(null, function() {
+                flashESP(function() {
+                    flashall(step + 1);
+                });
+            });
+            break;
+        case 3:
+            term.echo("[[b;#fff;]Step 3/3:] Flashing ESP index.html");
+            startTransaction(null, function() {
+                flashESPIndex(function() {
+                    flashall(step + 1);
+                });
+            });
+            break;
+        default:
+            endTransaction("[[b;#fff;]Done!]\n");
+            break;
+    }
+}
+
 function downloadall(step) {
     switch(step) {
         case 0:
@@ -794,7 +941,7 @@ function downloadall(step) {
             });
             break;
         case 1:
-            term.echo("[[b;#fff;]Step 1/3:] FPGA firmware");
+            term.echo("[[b;#fff;]Step 1/3:] Downloading FPGA firmware");
             startTransaction(null, function() {
                 downloadFPGA(function() {
                     downloadall(step + 1);
@@ -802,7 +949,7 @@ function downloadall(step) {
             });
             break;
         case 2:
-            term.echo("[[b;#fff;]Step 2/3:] ESP firmware");
+            term.echo("[[b;#fff;]Step 2/3:] Downloading ESP firmware");
             startTransaction(null, function() {
                 downloadESP(function() {
                     downloadall(step + 1);
@@ -810,7 +957,7 @@ function downloadall(step) {
             });
             break;
         case 3:
-            term.echo("[[b;#fff;]Step 3/3:] ESP index.html");
+            term.echo("[[b;#fff;]Step 3/3:] Downloading ESP index.html");
             startTransaction(null, function() {
                 downloadESPIndex(function() {
                     downloadall(step + 1);
@@ -859,31 +1006,34 @@ function download(uri, file, origMD5File, successCallback) {
     });
 }
 
-function flashFPGA(secure) {
+function flashFPGA(secure, successCallback) {
     flash(
         (secure ? "/flash/secure/fpga" : "/flash/fpga"),
         FIRMWARE_FILE,
-        "/etc/last_flash_md5"
+        "/etc/last_flash_md5",
+        successCallback
     );
 }
 
-function flashESP() {
+function flashESP(successCallback) {
     flash(
         "/flash/esp",
         ESP_FIRMWARE_FILE,
-        "/etc/last_esp_flash_md5"
+        "/etc/last_esp_flash_md5",
+        successCallback
     );
 }
 
-function flashESPIndex() {
+function flashESPIndex(successCallback) {
     flash(
         "/flash/index",
         ESP_INDEX_STAGING_FILE,
-        "/index.html.gz.md5"
+        "/index.html.gz.md5",
+        successCallback
     );
 }
 
-function flash(uri, file, md5File) {
+function flash(uri, file, md5File, successCallback) {
     //startSpinner(term, spinners["shark"]);
     term.set_prompt(progress(0, progressSize));
     $.ajax(uri).done(function (data) {
@@ -893,7 +1043,7 @@ function flash(uri, file, md5File) {
                     var calcMd5 = $.trim(data);
                     $.ajax(md5File).done(function (data) {
                         var lastFlashMd5 = $.trim(data);
-                        endTransactionWithMD5Check(calcMd5, lastFlashMd5, "Please try to re-flash.");
+                        endTransactionWithMD5Check(calcMd5, lastFlashMd5, "Please try to re-flash.", successCallback);
                     }).fail(function() {
                         endTransaction('Error reading checksum', true);
                     });
