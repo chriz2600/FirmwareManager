@@ -44,7 +44,7 @@ function typed(finish_typing) {
         if (message.length > 0) {
             term.set_prompt('');
             var new_prompt = '';
-	    var looper = function() {
+            var looper = function() {
                 var chr = $.terminal.substring(message, c, c+1);
                 new_prompt += chr;
                 term.set_prompt(new_prompt);
@@ -52,18 +52,18 @@ function typed(finish_typing) {
                 if (c == length(message)) {
                     // execute in next interval
                     setTimeout(function() {
-		        // swap command with prompt
-			finish_typing(term, message, prompt);
-                        anim = false
-			finish && finish();
-		    }, delay);
+                        // swap command with prompt
+                        finish_typing(term, message, prompt);
+                        anim = false;
+                        finish && finish();
+                    }, delay);
                 } else {
-		    if (delay == 0) {
-			process.nextTick(looper);
-		    } else {
-			setTimeout(looper, delay);
-		    }
-		}
+                    if (delay == 0) {
+                        process.nextTick(looper);
+                    } else {
+                        setTimeout(looper, delay);
+                    }
+                }
                 $('#term').scrollTop($('#term').prop('scrollHeight'));
             };
             setTimeout(looper, delay);
@@ -692,14 +692,14 @@ function checkSetupStatus() {
     $.ajax("/issetupmode").done(function (data) {
         var setupStatus = $.trim(data);
         if (setupStatus === "false") {
-            endTransaction(null, null, function() { 
+            endTransaction(null, null, function() {
                 getConfig(false, function() {
                     typed_message(term, "Firmware version: [[b;#fff;]" + currentConfigData["fw_version"] + "]\n", 36);
-                }); 
+                });
             });
         } else {
-            endTransaction(null, null, function() { 
-                getConfig(false, setupMode); 
+            endTransaction(null, null, function() {
+                getConfig(false, setupMode);
             });
         }
     }).fail(function() {

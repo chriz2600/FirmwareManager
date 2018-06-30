@@ -620,6 +620,10 @@ void setupHTTPServer() {
         request->send(200, "text/plain", inInitialSetupMode ? "true\n" : "false\n");
     });
 
+    server.on("/ping", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send(200);
+    });
+
     server.on("/setup", HTTP_POST, [](AsyncWebServerRequest *request) {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
