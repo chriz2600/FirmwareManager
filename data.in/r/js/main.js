@@ -476,27 +476,27 @@ function help(full, expert) {
     }
     msg += "[[b;#fff;]check] [[;#666;].........] check if new firmware is available\n";
     if (expert) {
-        msg += "[[b;#fff;]check][[b;#fff000;]<type>] [[;#666;]...] check if new firmware is available for [[b;#fff000;]<type>]\n";
+        msg += "[[b;#fff;]check][[bi;#fff000;]type] [[;#666;].....] check if new firmware is available for [[bi;#fff000;]type]\n";
     }
 
     if (expert) {
         msg += "[[b;#fff;]select] [[;#666;]........] select file to upload\n";
         msg += "[[b;#fff;]file] [[;#666;]..........] show information on selected file\n";
-        msg += "[[b;#fff;]upload][[b;#fff000;]<type>] [[;#666;]..] upload selected file as [[b;#fff000;]<type>]\n";
+        msg += "[[b;#fff;]upload][[bi;#fff000;]type] [[;#666;]....] upload selected file as [[bi;#fff000;]type]\n";
     }
 
     msg += "[[b;#fff;]download] [[;#666;]......] download latest firmware set\n"
     if (expert) {
-        msg += "[[b;#fff;]download][[b;#fff000;]<type>] [[;#666;]] download latest [[b;#fff000;]<type>] from server\n";
+        msg += "[[b;#fff;]download][[bi;#fff000;]type] [[;#666;]..] download latest [[bi;#fff000;]type] from server\n";
     }
 
     msg += "[[b;#fff;]flash] [[;#666;].........] flash firmware set from staging area\n";
     if (expert) {
-        msg += "[[b;#fff;]flash][[b;#fff000;]<type>] [[;#666;]...] flash [[b;#fff000;]<type>] from staging area\n";
+        msg += "[[b;#fff;]flash][[bi;#fff000;]type] [[;#666;].....] flash [[bi;#fff000;]type] from staging area\n";
     }
     msg += "[[b;#fff;]reset] [[;#666;].........] full DCHDMI reset\n";
     if (expert) {
-        msg += "[[b;#fff;]reset][[b;#fff000;]<type>] [[;#666;]...] reset [[b;#fff000;]<type>] \n";
+        msg += "[[b;#fff;]reset][[bi;#fff000;]type] [[;#666;].....] reset [[bi;#fff000;]type] \n";
     }
     msg += "[[b;#fff;]setup] [[;#666;].........] enter setup mode\n";
     msg += "[[b;#fff;]config] [[;#666;]........] get current setup\n";
@@ -511,7 +511,7 @@ function help(full, expert) {
 
     if (expert) {
         msg += "\n";
-        msg += "Available [[b;#fff000;]<type>]s:\n";
+        msg += "Available [[bi;#fff000;]type]s:\n";
         msg += "[[b;#fff;]fpga] [[;#666;]..........] FPGA\n";
         msg += "[[b;#fff;]esp] [[;#666;]...........] ESP\n";
         msg += "[[b;#fff;]index] [[;#666;].........] index.html\n";
