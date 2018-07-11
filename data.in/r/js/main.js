@@ -165,6 +165,8 @@ var term = $('#term').terminal(function(command, term) {
         term.disable();
     } else if (command.match(/^\s*help\s*$/)) {
         help(true);
+    } else if (command.match(/^\s*helpexpert\s*$/)) {
+        help(true, true);
     } else if (command.match(/^\s*ls\s*$/)) {
         startTransaction(null, function() {
         listFiles();
@@ -194,27 +196,15 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             uploadESPIndex();
         });
-    } else if (command.match(/^\s*downloadfpga\s*$/)) {
-        startTransaction(null, function() {
-            getConfig(false, downloadFPGA);
-        });
-    } else if (command.match(/^\s*downloadesp\s*$/)) {
-        startTransaction(null, function() {
-            getConfig(false, downloadESP);
-        });
-    } else if (command.match(/^\s*downloadindex\s*$/)) {
-        startTransaction(null, function() {
-   	    getConfig(false, downloadESPIndex);
-	});
-    } else if (command.match(/^\s*secureflash\s*$/)) {
-        startTransaction(null, function() {
-            flashFPGA(true);
-        });
     } else if (command.match(/^\s*flash\s*$/)) {
         flashall(0);
     } else if (command.match(/^\s*flashfpga\s*$/)) {
         startTransaction(null, function() {
             flashFPGA();
+        });
+    } else if (command.match(/^\s*flashfpgasecure\s*$/)) {
+        startTransaction(null, function() {
+            flashFPGA(true);
         });
     } else if (command.match(/^\s*flashesp\s*$/)) {
         startTransaction(null, function() {
@@ -225,8 +215,14 @@ var term = $('#term').terminal(function(command, term) {
             flashESPIndex();
         });
     } else if (command.match(/^\s*reset\s*$/)) {
+        resetall(0);
+    } else if (command.match(/^\s*resetfpga\s*$/)) {
         startTransaction(null, function() {
             reset();
+        });
+    } else if (command.match(/^\s*resetesp\s*$/)) {
+        startTransaction(null, function() {
+            restartESP();
         });
     } else if (command.match(/^\s*file\s*$/)) {
         startTransaction(null, function() {
@@ -246,10 +242,6 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             getConfig(false, getESPIndexFirmwareData);
         });
-    } else if (command.match(/^\s*restart\s*$/)) {
-        startTransaction(null, function() {
-            restartESP();
-        });
     } else if (command.match(/^\s*setup\s*$/)) {
         startTransaction(null, function() {
             getConfig(false, setupMode);
@@ -268,8 +260,30 @@ var term = $('#term').terminal(function(command, term) {
         });
     } else if (command.match(/^\s*download\s*$/)) {
         downloadall(0);
+    } else if (command.match(/^\s*downloadfpga\s*$/)) {
+        startTransaction(null, function() {
+            getConfig(false, downloadFPGA);
+        });
+    } else if (command.match(/^\s*downloadesp\s*$/)) {
+        startTransaction(null, function() {
+            getConfig(false, downloadESP);
+        });
+    } else if (command.match(/^\s*downloadindex\s*$/)) {
+        startTransaction(null, function() {
+            getConfig(false, downloadESPIndex);
+        });
     } else if (command.match(/^\s*details\s*$/)) {
-        helpDetails();
+        typed_message(term,
+              getHelpDetailsFPGA()
+            + getHelpDetailsESP()
+            + getHelpDetailsIndex(),
+        0);
+    } else if (command.match(/^\s*detailsfpga\s*$/)) {
+        typed_message(term, getHelpDetailsFPGA(), 0);
+    } else if (command.match(/^\s*detailsesp\s*$/)) {
+        typed_message(term, getHelpDetailsESP(), 0);
+    } else if (command.match(/^\s*detailsindex\s*$/)) {
+        typed_message(term, getHelpDetailsIndex(), 0);
     } else if (command.match(/^\s*banner\s*$/)) {
         term.clear();
         term.greetings();
@@ -291,27 +305,67 @@ var term = $('#term').terminal(function(command, term) {
             });
         });
     },
-    completion: [
-        "help",
-        "get",
-        "check",
-        "select",
-        "file",
-        "upload",
-        "download",
-        "flash",
-        "secureflash",
-        "reset",
-        "details",
-        "setup",
-        "config",
-        "clear",
-        "banner",
-        "restart",
-        "cleanup",
-        "ls",
-        "exit"
-    ],
+    completion: function(s, cb) {
+        if (!s) {
+            cb([
+                "help",
+                "helpexpert",
+                "get",
+                "check",
+                "download",
+                "flash",
+                "reset",
+                "details",
+                "setup",
+                "config",
+                "clear",
+                "banner",
+                "cleanup",
+                "ls",
+                "exit"
+            ]);
+            return;
+        }
+        cb([
+            "help",
+            "helpexpert",
+            "get",
+            "check",
+                "checkfpga",
+                "checkesp",
+                "checkindex",
+            "select",
+            "file",
+            /* upload */
+                "uploadfpga",
+                "uploadesp",
+                "uploadindex",
+            "download",
+                "downloadfpga",
+                "downloadesp",
+                "downloadindex",
+            "flash",
+                "flashfpga",
+                "flashfpgasecure",
+                "flashesp",
+                "flashindex",
+            "reset",
+                "resetfpga",
+                "resetesp",
+            "details",
+                "detailsfpga",
+                "detailsesp",
+                "detailsindex",
+            "setup",
+            "config",
+            "clear",
+            "banner",
+            //"restart",
+            "cleanup",
+            "ls",
+            "exit"
+        ]);
+    },
     prompt: 'dc-hdmi> ',
     greetings: [
         '       __                                        __ ',
@@ -341,67 +395,133 @@ function set_size() {
     tv[0].style.setProperty("--height", height);
 }
 
-function helpDetails() {
+function getHelpDetailsFPGA() {
     var msg = "";
-    msg = "[[b;#fff;]Firmware upgrade procedure:]\n"
-        + "  ________          ___________         _________\n"
-        + " /        \\        /           \\ flash /         \\\n"
-        + " | jQuery |        |   esp-07  |------>|  FPGA   |\n"
-        + " |  Term  | upload |  staging  | reset |  flash  |\n"
-        + " | (this) |------->|   flash   |------>|  (SPI)  |\n"
-        + " \\________/        \\___________/       \\_________/\n"
-        + "   |   /|\\              /|\\\n"
-        + "   |    |       download |\n"
-        + "  \\|/   |           _____|_____\n"
-        + "   select          /           \\\n"
-        + "   (from           | dc.i74.de |\n"
-        + "     HD)           \\___________/\n"
+    msg = "[[b;#fff;]FPGA firmware upgrade procedure:]\n"
+        + "  ________              ___________              _________\n"
+        + " /        \\            /           \\ flashfpga  /         \\\n"
+        + " | jQuery |            |  esp-07s  |----------->|  FPGA   |\n"
+        + " |  Term  | uploadfpga |  staging  | resetfpga  |  flash  |\n"
+        + " | (this) |----------->|   flash   |----------->|  (SPI)  |\n"
+        + " \\________/            \\___________/            \\_________/\n"
+        + "   |   /|\\                  /|\\\n"
+        + "   |    |       downloadfpga |\n"
+        + "  \\|/   |               _____|_____\n"
+        + "   select              /           \\\n"
+        + "   (from               | dc.i74.de |\n"
+        + "     HD)               \\___________/\n"
         + " \n";
-    typed_message(term, msg, 0);
+    return msg;
 }
 
-function help(full) {
+function getHelpDetailsESP() {
+    var msg = "";
+    msg = "[[b;#fff;]ESP firmware upgrade procedure:]\n"
+        + "  ________             ___________\n"
+        + " /        \\           /           \\\n"
+        + " | jQuery |           |  esp-07s  |───╮flashesp\n"
+        + " |  Term  | uploadesp |  staging  |<──┫\n"
+        + " | (this) |---------->|   flash   |───╯resetesp\n"
+        + " \\________/           \\___________/\n"
+        + "   |   /|\\                 /|\\\n"
+        + "   |    |       downloadesp |\n"
+        + "  \\|/   |             ______|______\n"
+        + "   select            /             \\\n"
+        + "   (from             | esp.i74.de  |\n"
+        + "     HD)             \\_____________/\n"
+        + " \n";
+    return msg;
+}
+
+function getHelpDetailsIndex() {
+    var msg = "";
+    msg = "[[b;#fff;]index.html upgrade procedure:]\n"
+        + "  ________               ___________\n"
+        + " /        \\             /           \\\n"
+        + " | jQuery |             |  esp-07s  |───╮flashindex\n"
+        + " |  Term  | uploadindex |  staging  |<──╯\n"
+        + " | (this) |------------>|   flash   |--->(browser) reload\n"
+        + " \\________/             \\___________/\n"
+        + "   |   /|\\                   /|\\\n"
+        + "   |    |       downloadindex |\n"
+        + "  \\|/   |               ______|______\n"
+        + "   select              /             \\\n"
+        + "   (from               | esp.i74.de  |\n"
+        + "     HD)               \\_____________/\n"
+        + " \n";
+    return msg;
+}
+
+function help(full, expert) {
     var msg = "";
     if (full) {
-        msg = " \n"
-            + "To [[b;#fff;]flash] the firmware, you have 2 options:\n"
-            + " \n"
-            + "1) [[b;#fff;]select] a firmware from your harddisk and [[b;#fff;]upload...] it\n"
-            + "   to the staging area\n"
-            + "2) [[b;#fff;]download] the latest firmware set from dc.i74.de to\n"
-            + "   the staging area\n"
-            + " \n"
-            + "After that, you are ready to [[b;#fff;]flash] the firmware to\n"
-            + "the FPGA configuration memory. It's possible to re-flash\n"
-            + "the firmware from the staging area at any time, because\n"
-            + "it's stored in the flash of the WiFi chip.\n"
-            + "Then type [[b;#fff;]reset] to reset the FPGA and load the previously\n"
-            + "flashed FPGA firmware.\n"
-            + "Type [[b;#fff;]restart] to reset the ESP and start with the previously\n"
-            + "flashed ESP firmware.\n"
-            + " \n"
-            + "Type [[b;#fff;]details] to show a diagram of the upgrade procedure.\n"
-            + " \n";
+        msg = " \n";
+        if (!expert) {
+            msg += "[[b;#fff;]System upgrade procedure:]\n";
+            msg += " \n";
+            msg += "1) Use [[b;#fff;]check] to see, if any updates are available.\n";
+            msg += "2) If updates are available, use [[b;#fff;]download] to stage the updates.\n";
+            msg += "3) Use [[b;#fff;]flash] to apply the updates.\n";
+            msg += "4) Use [[b;#fff;]reset] to restart DCHDMI with the updates.\n";
+            msg += " \n";
+            msg += "- Use [[b;#fff;]config] to display current configuration.\n";
+            msg += "- Use [[b;#fff;]setup] to update the configuration.\n";
+            msg += " \n";
+        }
     }
-    msg += "Commands:\n";
-    msg += "[[b;#fff;]check]:       check if new firmware is available\n";
-    msg += "[[b;#fff;]select]:      select file to upload\n";
-    msg += "[[b;#fff;]file]:        show information on selected file\n";
-    msg += "[[b;#fff;]upload]:      upload selected file\n";
-    msg += "[[b;#fff;]download]:    download latest firmware set\n";
-    msg += "[[b;#fff;]flash]:       flash FPGA from staging area\n";
-    msg += "[[b;#fff;]secureflash]: flash FPGA from staging area, while disabling fpga\n";
-    msg += "[[b;#fff;]reset]:       reset FPGA\n";
-    msg += "[[b;#fff;]details]:     show firmware upgrade procedure\n";
-    msg += "[[b;#fff;]setup]:       enter setup mode\n";
-    msg += "[[b;#fff;]config]:      get current setup\n";
-    msg += "[[b;#fff;]clear]:       clear terminal screen\n";
-    msg += "[[b;#fff;]restart]:     restarts ESP module\n";
-    msg += "[[b;#fff;]cleanup]:     remove staged firmware file\n";
-    msg += "[[b;#fff;]ls]:          list files\n";
-    msg += "[[b;#fff;]exit]:        end terminal\n";
+    if (expert) {
+        msg += "[[i;#fff;]Expert command set:]\n";
+    } else {
+        msg += "[[i;#fff;]Basic commands:]\n";
+    }
+    msg += "[[b;#fff;]check] [[;#666;].........] check if new firmware is available\n";
+    if (expert) {
+        msg += "[[b;#fff;]check][[b;#fff000;]<type>] [[;#666;]...] check if new firmware is available for [[b;#fff000;]<type>]\n";
+    }
 
-    typed_message(term, msg, 0);
+    if (expert) {
+        msg += "[[b;#fff;]select] [[;#666;]........] select file to upload\n";
+        msg += "[[b;#fff;]file] [[;#666;]..........] show information on selected file\n";
+        msg += "[[b;#fff;]upload][[b;#fff000;]<type>] [[;#666;]..] upload selected file as [[b;#fff000;]<type>]\n";
+    }
+
+    msg += "[[b;#fff;]download] [[;#666;]......] download latest firmware set\n"
+    if (expert) {
+        msg += "[[b;#fff;]download][[b;#fff000;]<type>] [[;#666;]] download latest [[b;#fff000;]<type>] from server\n";
+    }
+
+    msg += "[[b;#fff;]flash] [[;#666;].........] flash firmware set from staging area\n";
+    if (expert) {
+        msg += "[[b;#fff;]flash][[b;#fff000;]<type>] [[;#666;]...] flash [[b;#fff000;]<type>] from staging area\n";
+    }
+    msg += "[[b;#fff;]reset] [[;#666;].........] full DCHDMI reset\n";
+    if (expert) {
+        msg += "[[b;#fff;]reset][[b;#fff000;]<type>] [[;#666;]...] reset [[b;#fff000;]<type>] \n";
+    }
+    msg += "[[b;#fff;]setup] [[;#666;].........] enter setup mode\n";
+    msg += "[[b;#fff;]config] [[;#666;]........] get current setup\n";
+    msg += "[[b;#fff;]clear] [[;#666;].........] clear terminal screen\n";
+
+    if (expert) {
+        msg += "[[b;#fff;]cleanup] [[;#666;].......] remove staged firmware files\n";
+        msg += "[[b;#fff;]ls] [[;#666;]............] list files on ESP flash\n";
+    }
+
+    msg += "[[b;#fff;]exit] [[;#666;]..........] end terminal\n";
+
+    if (expert) {
+        msg += "\n";
+        msg += "Available [[b;#fff000;]<type>]s:\n";
+        msg += "[[b;#fff;]fpga] [[;#666;]..........] FPGA\n";
+        msg += "[[b;#fff;]esp] [[;#666;]...........] ESP\n";
+        msg += "[[b;#fff;]index] [[;#666;].........] index.html\n";
+        msg += "\n";
+        msg += "Special command:\n";
+        msg += "[[b;#fff;]flashfpgasecure] flash FPGA from staging area, while disabling fpga\n";
+    }
+
+    //typed_message(term, msg, 0);
+    term.echo(msg);
 }
 
 function progress(percent, width) {
@@ -530,11 +650,6 @@ function prepareQuestion(pos, total, field) {
     };
 }
 
-function restartESP() {
-    $.ajax("/restart");
-    endTransaction('ESP module restarted.');
-}
-
 function doDeleteFirmwareFile() {
     $.ajax("/cleanup");
     endTransaction('firmware file removed.');
@@ -623,7 +738,7 @@ function setupMode() {
                     + setupDataDisplayToString(setupData, true)
                     + "-----------------------------------------------------"
                     + ' \nAfter saving changes, you will have to'
-                    + ' \nrestart this application by typing: [[b;#fff;]restart].'
+                    + ' \nreset this application by typing: [[b;#fff;]reset].'
                     + ' \nSave changes (y)es/(n)o? ';
             },
             cb: function(value) {
@@ -863,11 +978,40 @@ function checkFirmware() {
     });
 }
 
-function reset() {
+function resetall(step) {
+    switch (step) {
+        case 0:
+            startTransaction(null, function() {
+                reset(function() {
+                    resetall(step + 1);
+                });
+            });
+            break;
+        case 1:
+            startTransaction(null, function() {
+                restartESP(function() {
+                    resetall(step + 1);
+                });
+            });
+            break;
+        default:
+            break;
+    }
+}
+
+function reset(successCallback) {
     $.ajax("/reset").done(function (data) {
-        endTransaction('FPGA reset [[b;green;]OK]\n');
+        endTransaction('FPGA reset [[b;green;]OK]\n', false, successCallback);
     }).fail(function() {
         endTransaction("Error resetting fpga!", true);
+    });
+}
+
+function restartESP(successCallback) {
+    $.ajax("/restart").done(function (data) {
+        endTransaction('ESP module restarted.', false, successCallback);
+    }).fail(function() {
+        endTransaction("Error restarting ESP!", true);
     });
 }
 
@@ -893,7 +1037,7 @@ function doProgress(successCallback) {
 }
 
 function flashall(step) {
-    switch(step) {
+    switch (step) {
         case 0:
             startTransaction(null, function() {
                 getConfig(false, function() {
