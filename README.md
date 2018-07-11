@@ -148,7 +148,7 @@ Each data packet looks like this:
 
 ## Schematic:
 
-- **SOON**
+![Schematic](https://raw.githubusercontent.com/chriz2600/FirmwareManager/master/misc/DCFirmwareManager.png)
 
 ----
 
