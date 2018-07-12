@@ -12,27 +12,27 @@ process.nextTick = (function () {
     var canSetImmediate = typeof window !== 'undefined' && window.setImmediate;
     var canPost = typeof window !== 'undefined' && window.postMessage && window.addEventListener;
     if (canSetImmediate) {
-	return function (f) { return window.setImmediate(f) };
+        return function (f) { return window.setImmediate(f) };
     }
     if (canPost) {
-	var queue = [];
-	window.addEventListener('message', function (ev) {
-	    var source = ev.source;
-	    if ((source === window || source === null) && ev.data === 'process-tick') {
-		ev.stopPropagation();
-		if (queue.length > 0) {
-		    var fn = queue.shift();
-		    fn();
-		}
-	    }
-	}, true);
-	return function nextTick(fn) {
-	    queue.push(fn);
-	    window.postMessage('process-tick', '*');
-	};
+        var queue = [];
+        window.addEventListener('message', function (ev) {
+            var source = ev.source;
+            if ((source === window || source === null) && ev.data === 'process-tick') {
+                ev.stopPropagation();
+                if (queue.length > 0) {
+                    var fn = queue.shift();
+                    fn();
+                }
+            }
+        }, true);
+        return function nextTick(fn) {
+            queue.push(fn);
+            window.postMessage('process-tick', '*');
+        };
     }
     return function nextTick(fn) {
-	setTimeout(fn, 0);
+        setTimeout(fn, 0);
     };
 })();
 
@@ -222,7 +222,9 @@ var term = $('#term').terminal(function(command, term) {
         });
     } else if (command.match(/^\s*resetesp\s*$/)) {
         startTransaction(null, function() {
-            restartESP();
+            restartESP(function() {
+                document.location.reload(true);
+            });
         });
     } else if (command.match(/^\s*file\s*$/)) {
         startTransaction(null, function() {
@@ -984,7 +986,7 @@ function resetall(step) {
             startTransaction(null, function() {
                 reset(function() {
                     resetall(step + 1);
-                });
+                }, true);
             });
             break;
         case 1:
@@ -995,23 +997,43 @@ function resetall(step) {
             });
             break;
         default:
+            document.location.reload(true);
             break;
     }
 }
 
-function reset(successCallback) {
+function reset(successCallback, noNewline) {
     $.ajax("/reset").done(function (data) {
-        endTransaction('FPGA reset [[b;green;]OK]\n', false, successCallback);
+        endTransaction('FPGA reset [[b;green;]OK]' + (noNewline ? '' : '\n'), false, successCallback);
     }).fail(function() {
         endTransaction("Error resetting fpga!", true);
     });
 }
 
+var retryTimeout;
+
 function restartESP(successCallback) {
-    $.ajax("/restart").done(function (data) {
-        endTransaction('ESP module restarted.', false, successCallback);
+    $.ajax({ url: "/restart", timeout: 1000 });
+    term.echo('ESP reset [[b;green;]OK]');
+    retryTimeout = 100;
+    pingESP(successCallback);
+}
+
+function pingESP(successCallback) {
+    $.ajax({
+        url: "/ping",
+        timeout: 1000
+    }).done(function (data) {
+        term.set_prompt('Done, reloading page...');
+        successCallback();
     }).fail(function() {
-        endTransaction("Error restarting ESP!", true);
+        term.set_prompt("Waiting for ESP to restart (" + (retryTimeout) + ")");
+        retryTimeout--;
+        if (retryTimeout > 0) {
+            pingESP(successCallback);
+        } else {
+            endTransaction('ping within timeout failed.', true);
+        }
     });
 }
 
