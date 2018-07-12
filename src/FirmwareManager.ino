@@ -686,6 +686,14 @@ void setupHTTPServer() {
     // set authentication by configured user/pass later
     handler->setAuthentication(httpAuthUser, httpAuthPass);
 
+    server.onNotFound([](AsyncWebServerRequest *request){
+        if (request->url().endsWith(".md5")) {
+           request->send(200, "text/plain", "00000000000000000000000000000000\n");
+           return;
+        }
+        request->send(404);
+    });
+
     server.begin();
 }
 
