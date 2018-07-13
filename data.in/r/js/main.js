@@ -610,7 +610,10 @@ var setupDataMapping = {
     firmware_fpga:    [ "Firmware FPGA    ", "10CL025" ],
     firmware_format:  [ "Firmware Format  ", "VGA" ],
     http_auth_user:   [ "HTTP User        ", "Test" ],
-    http_auth_pass:   [ "HTTP Password    ", "testtest" ]
+    http_auth_pass:   [ "HTTP Password    ", "testtest" ],
+    conf_ip_addr:     [ "IP address       ", "empty" ],
+    conf_ip_gateway:  [ "Gateway          ", "empty" ],
+    conf_ip_mask:     [ "Netmask          ", "empty" ]
 };
 var dataExcludeMap = {
     "flash_chip_size":"", 

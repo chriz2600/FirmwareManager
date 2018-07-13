@@ -19,15 +19,31 @@
 #include "FlashESPTask.h"
 #include "FlashESPIndexTask.h"
 
-char ssid[64];
-char password[64];
-char otaPassword[64]; 
-char firmwareServer[1024] = "dc.i74.de";
-char firmwareVersion[64] = "master";
-char firmwareFPGA[64] = "10CL025";
-char firmwareFormat[64] = "VGA";
-char httpAuthUser[64] = "Test";
-char httpAuthPass[64] = "testtest";
+#define DEFAULT_SSID ""
+#define DEFAULT_PASSWORD ""
+#define DEFAULT_OTA_PASSWORD ""
+#define DEFAULT_FW_SERVER "dc.i74.de"
+#define DEFAULT_FW_VERSION "master"
+#define DEFAULT_FW_FPGA "10CL025"
+#define DEFAULT_FW_FORMAT "VGA"
+#define DEFAULT_HTTP_USER "Test"
+#define DEFAULT_HTTP_PASS "testtest"
+#define DEFAULT_CONF_IP_ADDR ""
+#define DEFAULT_CONF_IP_GATEWAY ""
+#define DEFAULT_CONF_IP_MASK ""
+
+char ssid[64] = DEFAULT_SSID;
+char password[64] = DEFAULT_PASSWORD;
+char otaPassword[64] = DEFAULT_OTA_PASSWORD; 
+char firmwareServer[1024] = DEFAULT_FW_SERVER;
+char firmwareVersion[64] = DEFAULT_FW_VERSION;
+char firmwareFPGA[64] = DEFAULT_FW_FPGA;
+char firmwareFormat[64] = DEFAULT_FW_FORMAT;
+char httpAuthUser[64] = DEFAULT_HTTP_USER;
+char httpAuthPass[64] = DEFAULT_HTTP_PASS;
+char confIPAddr[24] = DEFAULT_CONF_IP_ADDR;
+char confIPGateway[24] = DEFAULT_CONF_IP_GATEWAY;
+char confIPMask[24] = DEFAULT_CONF_IP_MASK;
 const char* host = "dc-firmware-manager";
 const char* WiFiAPPSK = "geheim1234";
 IPAddress ipAddress( 192, 168, 4, 1 );
@@ -85,6 +101,9 @@ void setupCredentials(void) {
     _readFile("/etc/firmware_format", firmwareFormat, 64);
     _readFile("/etc/http_auth_user", httpAuthUser, 64);
     _readFile("/etc/http_auth_pass", httpAuthPass, 64);
+    _readFile("/etc/conf_ip_addr", confIPAddr, 24);
+    _readFile("/etc/conf_ip_gateway", confIPGateway, 24);
+    _readFile("/etc/conf_ip_mask", confIPMask, 24);
 
     if (DEBUG) {
         DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
@@ -97,6 +116,9 @@ void setupCredentials(void) {
         DBG_OUTPUT_PORT.printf("| /etc/firmware_format  -> firmwareFormat:  [%s]\n", firmwareFormat);
         DBG_OUTPUT_PORT.printf("| /etc/http_auth_user   -> httpAuthUser:    [%s]\n", httpAuthUser);
         DBG_OUTPUT_PORT.printf("| /etc/http_auth_pass   -> httpAuthPass:    [%s]\n", httpAuthPass);
+        DBG_OUTPUT_PORT.printf("| /etc/conf_ip_addr     -> confIPAddr:      [%s]\n", confIPAddr);
+        DBG_OUTPUT_PORT.printf("| /etc/conf_ip_gateway  -> confIPGateway:   [%s]\n", confIPGateway);
+        DBG_OUTPUT_PORT.printf("| /etc/conf_ip_mask     -> confIPMask:      [%s]\n", confIPMask);
         DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
     }
 }
@@ -440,13 +462,14 @@ void setupWiFi() {
     }
 }
 
-void writeSetupParameter(AsyncWebServerRequest *request, const char* param, char* target, unsigned int maxlen) {
+void writeSetupParameter(AsyncWebServerRequest *request, const char* param, char* target, unsigned int maxlen, const char* resetValue) {
     if(request->hasParam(param, true)) {
         String _tmp = "/etc/" + String(param);
         const char* filename = _tmp.c_str();
         AsyncWebParameter *p = request->getParam(param, true);
         if (p->value() == "") {
             DBG_OUTPUT_PORT.printf("SPIFFS.remove: %s\n", filename);
+            snprintf(target, maxlen, "%s", resetValue);
             SPIFFS.remove(filename);
         } else {
             snprintf(target, maxlen, "%s", p->value().c_str());
@@ -648,15 +671,18 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        writeSetupParameter(request, "ssid", ssid, 64);
-        writeSetupParameter(request, "password", password, 64);
-        writeSetupParameter(request, "ota_pass", otaPassword, 64);
-        writeSetupParameter(request, "firmware_server", firmwareServer, 1024);
-        writeSetupParameter(request, "firmware_version", firmwareVersion, 64);
-        writeSetupParameter(request, "firmware_fpga", firmwareFPGA, 64);
-        writeSetupParameter(request, "firmware_format", firmwareFormat, 64);
-        writeSetupParameter(request, "http_auth_user", httpAuthUser, 64);
-        writeSetupParameter(request, "http_auth_pass", httpAuthPass, 64);
+        writeSetupParameter(request, "ssid", ssid, 64, DEFAULT_SSID);
+        writeSetupParameter(request, "password", password, 64, DEFAULT_PASSWORD);
+        writeSetupParameter(request, "ota_pass", otaPassword, 64, DEFAULT_OTA_PASSWORD);
+        writeSetupParameter(request, "firmware_server", firmwareServer, 1024, DEFAULT_FW_SERVER);
+        writeSetupParameter(request, "firmware_version", firmwareVersion, 64, DEFAULT_FW_VERSION);
+        writeSetupParameter(request, "firmware_fpga", firmwareFPGA, 64, DEFAULT_FW_FPGA);
+        writeSetupParameter(request, "firmware_format", firmwareFormat, 64, DEFAULT_FW_FORMAT);
+        writeSetupParameter(request, "http_auth_user", httpAuthUser, 64, DEFAULT_HTTP_USER);
+        writeSetupParameter(request, "http_auth_pass", httpAuthPass, 64, DEFAULT_HTTP_PASS);
+        writeSetupParameter(request, "conf_ip_addr", confIPAddr, 24, DEFAULT_CONF_IP_ADDR);
+        writeSetupParameter(request, "conf_ip_gateway", confIPGateway, 24, DEFAULT_CONF_IP_GATEWAY);
+        writeSetupParameter(request, "conf_ip_mask", confIPMask, 24, DEFAULT_CONF_IP_MASK);
 
         request->send(200, "text/plain", "OK\n");
     });
@@ -680,6 +706,9 @@ void setupHTTPServer() {
         root["http_auth_user"] = httpAuthUser;
         root["http_auth_pass"] = httpAuthPass;
         root["flash_chip_size"] = ESP.getFlashChipSize();
+        root["conf_ip_addr"] = confIPAddr;
+        root["conf_ip_gateway"] = confIPGateway;
+        root["conf_ip_mask"] = confIPMask;
         root["fw_version"] = FW_VERSION;
 
         root.printTo(*response);
