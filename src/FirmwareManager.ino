@@ -371,9 +371,14 @@ void setupArduinoOTA() {
 
 void setupWiFi() {
     //WIFI INIT
+    WiFi.disconnect();
     WiFi.softAPdisconnect(true);
     WiFi.setAutoConnect(true);
     WiFi.setAutoReconnect(true);
+    WiFi.hostname(host);
+
+    //WiFi.config(IPAddress(192, 168, 2, 235), IPAddress(192, 168, 2, 1), IPAddress(255, 255, 255, 0));
+
     WiFi.mode(WIFI_STA);
     
     DBG_OUTPUT_PORT.printf(">> WiFi.getAutoConnect: %i\n", WiFi.getAutoConnect());
@@ -404,9 +409,24 @@ void setupWiFi() {
         setupAPMode();
     } else {
         ipAddress = WiFi.localIP();
+        IPAddress gateway = WiFi.gatewayIP();
+        IPAddress subnet = WiFi.subnetMask();
+
         DBG_OUTPUT_PORT.printf(
-            ">> Connected! IP address: %d.%d.%d.%d\n", 
+            ">> Connected!\n   IP address:      %d.%d.%d.%d\n",
             ipAddress[0], ipAddress[1], ipAddress[2], ipAddress[3]
+        );
+        DBG_OUTPUT_PORT.printf(
+            "   Gateway address: %d.%d.%d.%d\n",
+            gateway[0], gateway[1], gateway[2], gateway[3]
+        );
+        DBG_OUTPUT_PORT.printf(
+            "   Subnet mask:     %d.%d.%d.%d\n",
+            subnet[0], subnet[1], subnet[2], subnet[3]
+        );
+        DBG_OUTPUT_PORT.printf(
+            "   Hostname:        %s\n",
+            WiFi.hostname().c_str()
         );
     }
     
