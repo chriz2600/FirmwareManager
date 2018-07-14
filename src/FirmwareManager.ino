@@ -401,6 +401,14 @@ void setupArduinoOTA() {
 }
 
 void setupWiFi() {
+    bool doStaticIpConfig = false;
+    IPAddress ipAddr;
+    doStaticIpConfig = ipAddr.fromString(confIPAddr);
+    IPAddress ipGateway;
+    doStaticIpConfig = doStaticIpConfig && ipGateway.fromString(confIPGateway);
+    IPAddress ipMask;
+    doStaticIpConfig = doStaticIpConfig && ipMask.fromString(confIPMask);
+
     //WIFI INIT
     WiFi.disconnect();
     WiFi.softAPdisconnect(true);
@@ -408,7 +416,10 @@ void setupWiFi() {
     WiFi.setAutoReconnect(true);
     WiFi.hostname(host);
 
-    //WiFi.config(IPAddress(192, 168, 2, 235), IPAddress(192, 168, 2, 1), IPAddress(255, 255, 255, 0));
+    DBG_OUTPUT_PORT.printf(">> Do static ip configuration: %i\n", doStaticIpConfig);
+    if (doStaticIpConfig) {
+        WiFi.config(ipAddr, ipGateway, ipMask);
+    }
 
     WiFi.mode(WIFI_STA);
     
