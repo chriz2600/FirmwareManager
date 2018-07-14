@@ -31,6 +31,7 @@
 #define DEFAULT_CONF_IP_ADDR ""
 #define DEFAULT_CONF_IP_GATEWAY ""
 #define DEFAULT_CONF_IP_MASK ""
+#define DEFAULT_CONF_IP_DNS ""
 #define DEFAULT_HOST "dc-firmware-manager"
 
 char ssid[64] = DEFAULT_SSID;
@@ -45,6 +46,7 @@ char httpAuthPass[64] = DEFAULT_HTTP_PASS;
 char confIPAddr[24] = DEFAULT_CONF_IP_ADDR;
 char confIPGateway[24] = DEFAULT_CONF_IP_GATEWAY;
 char confIPMask[24] = DEFAULT_CONF_IP_MASK;
+char confIPDNS[24] = DEFAULT_CONF_IP_DNS;
 char host[64] = DEFAULT_HOST;
 const char* WiFiAPPSK = "geheim1234";
 IPAddress ipAddress( 192, 168, 4, 1 );
@@ -111,6 +113,7 @@ void setupCredentials(void) {
     _readFile("/etc/conf_ip_addr", confIPAddr, 24, DEFAULT_CONF_IP_ADDR);
     _readFile("/etc/conf_ip_gateway", confIPGateway, 24, DEFAULT_CONF_IP_GATEWAY);
     _readFile("/etc/conf_ip_mask", confIPMask, 24, DEFAULT_CONF_IP_MASK);
+    _readFile("/etc/conf_ip_dns", confIPDNS, 24, DEFAULT_CONF_IP_DNS);
     _readFile("/etc/hostname", host, 64, DEFAULT_HOST);
 
     if (DEBUG) {
@@ -127,6 +130,7 @@ void setupCredentials(void) {
         DBG_OUTPUT_PORT.printf("| /etc/conf_ip_addr     -> confIPAddr:      [%s]\n", confIPAddr);
         DBG_OUTPUT_PORT.printf("| /etc/conf_ip_gateway  -> confIPGateway:   [%s]\n", confIPGateway);
         DBG_OUTPUT_PORT.printf("| /etc/conf_ip_mask     -> confIPMask:      [%s]\n", confIPMask);
+        DBG_OUTPUT_PORT.printf("| /etc/conf_ip_dns      -> confIPDNS:       [%s]\n", confIPDNS);
         DBG_OUTPUT_PORT.printf("| /etc/hostname         -> host:            [%s]\n", host);
         DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
     }
@@ -408,6 +412,8 @@ void setupWiFi() {
     doStaticIpConfig = doStaticIpConfig && ipGateway.fromString(confIPGateway);
     IPAddress ipMask;
     doStaticIpConfig = doStaticIpConfig && ipMask.fromString(confIPMask);
+    IPAddress ipDNS;
+    doStaticIpConfig = doStaticIpConfig && ipDNS.fromString(confIPDNS);
 
     //WIFI INIT
     WiFi.disconnect();
@@ -418,7 +424,7 @@ void setupWiFi() {
 
     DBG_OUTPUT_PORT.printf(">> Do static ip configuration: %i\n", doStaticIpConfig);
     if (doStaticIpConfig) {
-        WiFi.config(ipAddr, ipGateway, ipMask);
+        WiFi.config(ipAddr, ipGateway, ipMask, ipDNS);
     }
 
     WiFi.mode(WIFI_STA);
@@ -703,6 +709,7 @@ void setupHTTPServer() {
         writeSetupParameter(request, "conf_ip_addr", confIPAddr, 24, DEFAULT_CONF_IP_ADDR);
         writeSetupParameter(request, "conf_ip_gateway", confIPGateway, 24, DEFAULT_CONF_IP_GATEWAY);
         writeSetupParameter(request, "conf_ip_mask", confIPMask, 24, DEFAULT_CONF_IP_MASK);
+        writeSetupParameter(request, "conf_ip_dns", confIPDNS, 24, DEFAULT_CONF_IP_DNS);
         writeSetupParameter(request, "hostname", host, 64, DEFAULT_HOST);
 
         request->send(200, "text/plain", "OK\n");
@@ -730,6 +737,7 @@ void setupHTTPServer() {
         root["conf_ip_addr"] = confIPAddr;
         root["conf_ip_gateway"] = confIPGateway;
         root["conf_ip_mask"] = confIPMask;
+        root["conf_ip_dns"] = confIPDNS;
         root["hostname"] = host;
         root["fw_version"] = FW_VERSION;
 

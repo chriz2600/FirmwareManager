@@ -614,6 +614,7 @@ var setupDataMapping = {
     conf_ip_addr:     [ "IP address       ", "empty" ],
     conf_ip_gateway:  [ "Gateway          ", "empty" ],
     conf_ip_mask:     [ "Netmask          ", "empty" ],
+    conf_ip_dns:      [ "DNS              ", "empty" ],
     hostname:         [ "Hostname         ", "dc-firmware-manager" ]
 };
 var dataExcludeMap = {
