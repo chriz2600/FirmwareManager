@@ -31,6 +31,7 @@
 #define DEFAULT_CONF_IP_ADDR ""
 #define DEFAULT_CONF_IP_GATEWAY ""
 #define DEFAULT_CONF_IP_MASK ""
+#define DEFAULT_HOST "dc-firmware-manager"
 
 char ssid[64] = DEFAULT_SSID;
 char password[64] = DEFAULT_PASSWORD;
@@ -44,7 +45,7 @@ char httpAuthPass[64] = DEFAULT_HTTP_PASS;
 char confIPAddr[24] = DEFAULT_CONF_IP_ADDR;
 char confIPGateway[24] = DEFAULT_CONF_IP_GATEWAY;
 char confIPMask[24] = DEFAULT_CONF_IP_MASK;
-const char* host = "dc-firmware-manager";
+char host[64] = DEFAULT_HOST;
 const char* WiFiAPPSK = "geheim1234";
 IPAddress ipAddress( 192, 168, 4, 1 );
 bool inInitialSetupMode = false;
@@ -77,33 +78,40 @@ void _writeFile(const char *filename, const char *towrite, unsigned int len) {
     }
 }
 
-void _readFile(const char *filename, char *target, unsigned int len) {
+void _readFile(const char *filename, char *target, unsigned int len, const char* defaultValue) {
     bool exists = SPIFFS.exists(filename);
+    bool readFromFile = false;
     if (exists) {
         File f = SPIFFS.open(filename, "r");
         if (f) {
             f.readString().toCharArray(target, len);
             f.close();
             DBG_OUTPUT_PORT.printf(">> _readFile: %s:[%s]\n", filename, target);
+            readFromFile = true;
         }
+    }
+    if (!readFromFile) {
+        snprintf(target, len, "%s", defaultValue);
+        DBG_OUTPUT_PORT.printf(">> _readFile: %s:[%s] (default)\n", filename, target);
     }
 }
 
 void setupCredentials(void) {
     DBG_OUTPUT_PORT.printf(">> Reading stored values...\n");
 
-    _readFile("/etc/ssid", ssid, 64);
-    _readFile("/etc/password", password, 64);
-    _readFile("/etc/ota_pass", otaPassword, 64);
-    _readFile("/etc/firmware_server", firmwareServer, 1024);
-    _readFile("/etc/firmware_version", firmwareVersion, 64);
-    _readFile("/etc/firmware_fpga", firmwareFPGA, 64);
-    _readFile("/etc/firmware_format", firmwareFormat, 64);
-    _readFile("/etc/http_auth_user", httpAuthUser, 64);
-    _readFile("/etc/http_auth_pass", httpAuthPass, 64);
-    _readFile("/etc/conf_ip_addr", confIPAddr, 24);
-    _readFile("/etc/conf_ip_gateway", confIPGateway, 24);
-    _readFile("/etc/conf_ip_mask", confIPMask, 24);
+    _readFile("/etc/ssid", ssid, 64, DEFAULT_SSID);
+    _readFile("/etc/password", password, 64, DEFAULT_PASSWORD);
+    _readFile("/etc/ota_pass", otaPassword, 64, DEFAULT_OTA_PASSWORD);
+    _readFile("/etc/firmware_server", firmwareServer, 1024, DEFAULT_FW_SERVER);
+    _readFile("/etc/firmware_version", firmwareVersion, 64, DEFAULT_FW_VERSION);
+    _readFile("/etc/firmware_fpga", firmwareFPGA, 64, DEFAULT_FW_FPGA);
+    _readFile("/etc/firmware_format", firmwareFormat, 64, DEFAULT_FW_FORMAT);
+    _readFile("/etc/http_auth_user", httpAuthUser, 64, DEFAULT_HTTP_USER);
+    _readFile("/etc/http_auth_pass", httpAuthPass, 64, DEFAULT_HTTP_PASS);
+    _readFile("/etc/conf_ip_addr", confIPAddr, 24, DEFAULT_CONF_IP_ADDR);
+    _readFile("/etc/conf_ip_gateway", confIPGateway, 24, DEFAULT_CONF_IP_GATEWAY);
+    _readFile("/etc/conf_ip_mask", confIPMask, 24, DEFAULT_CONF_IP_MASK);
+    _readFile("/etc/hostname", host, 64, DEFAULT_HOST);
 
     if (DEBUG) {
         DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
@@ -119,6 +127,7 @@ void setupCredentials(void) {
         DBG_OUTPUT_PORT.printf("| /etc/conf_ip_addr     -> confIPAddr:      [%s]\n", confIPAddr);
         DBG_OUTPUT_PORT.printf("| /etc/conf_ip_gateway  -> confIPGateway:   [%s]\n", confIPGateway);
         DBG_OUTPUT_PORT.printf("| /etc/conf_ip_mask     -> confIPMask:      [%s]\n", confIPMask);
+        DBG_OUTPUT_PORT.printf("| /etc/hostname         -> host:            [%s]\n", host);
         DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
     }
 }
@@ -683,6 +692,7 @@ void setupHTTPServer() {
         writeSetupParameter(request, "conf_ip_addr", confIPAddr, 24, DEFAULT_CONF_IP_ADDR);
         writeSetupParameter(request, "conf_ip_gateway", confIPGateway, 24, DEFAULT_CONF_IP_GATEWAY);
         writeSetupParameter(request, "conf_ip_mask", confIPMask, 24, DEFAULT_CONF_IP_MASK);
+        writeSetupParameter(request, "hostname", host, 64, DEFAULT_HOST);
 
         request->send(200, "text/plain", "OK\n");
     });
@@ -709,6 +719,7 @@ void setupHTTPServer() {
         root["conf_ip_addr"] = confIPAddr;
         root["conf_ip_gateway"] = confIPGateway;
         root["conf_ip_mask"] = confIPMask;
+        root["hostname"] = host;
         root["fw_version"] = FW_VERSION;
 
         root.printTo(*response);

@@ -613,7 +613,8 @@ var setupDataMapping = {
     http_auth_pass:   [ "HTTP Password    ", "testtest" ],
     conf_ip_addr:     [ "IP address       ", "empty" ],
     conf_ip_gateway:  [ "Gateway          ", "empty" ],
-    conf_ip_mask:     [ "Netmask          ", "empty" ]
+    conf_ip_mask:     [ "Netmask          ", "empty" ],
+    hostname:         [ "Hostname         ", "dc-firmware-manager" ]
 };
 var dataExcludeMap = {
     "flash_chip_size":"", 
