@@ -3,6 +3,10 @@
 #define NCONFIG 5
 #define DBG_OUTPUT_PORT Serial
 
+#define FPGA_SCL 0
+#define FPGA_SDA 2
+#define CLOCK_STRETCH_TIMEOUT 200
+
 #define FIRMWARE_FILE "/firmware.dc"
 #define FIRMWARE_EXTENSION "dc"
 

@@ -18,6 +18,7 @@
 #include "FlashTask.h"
 #include "FlashESPTask.h"
 #include "FlashESPIndexTask.h"
+#include <brzo_i2c.h>
 
 #define DEFAULT_SSID ""
 #define DEFAULT_PASSWORD ""
@@ -815,6 +816,10 @@ void setupTaskManager() {
     taskManager.Setup();
 }
 
+void setupI2C() {
+    brzo_i2c_setup(FPGA_SDA, FPGA_SCL, CLOCK_STRETCH_TIMEOUT);
+}
+
 void setup(void) {
 
     DBG_OUTPUT_PORT.begin(115200);
@@ -827,6 +832,7 @@ void setup(void) {
     setupSPIFFS();
     setupCredentials();
     setupWiFi();
+    setupI2C();
     setupHTTPServer();
     
     if (strlen(otaPassword)) 
