@@ -19,6 +19,7 @@
 #include "FlashESPTask.h"
 #include "FlashESPIndexTask.h"
 #include <brzo_i2c.h>
+#include "osd_ram.h"
 
 #define DEFAULT_SSID ""
 #define DEFAULT_PASSWORD ""
@@ -558,6 +559,7 @@ void setupHTTPServer() {
         root["freeSketchSpace"] = ESP.getFreeSketchSpace();
         root["maxSketchSpace"] = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
         root["flashChipSize"] = ESP.getFlashChipSize();
+	root["freeHeapSize"] = ESP.getFreeHeap();
 
         JsonArray &datas = root.createNestedArray("files");
 
@@ -790,6 +792,7 @@ void setupSPIFFS() {
     {
         FSInfo fs_info;
         SPIFFS.info(fs_info);
+	
 
         DBG_OUTPUT_PORT.printf(">> totalBytes: (%lu)\n", fs_info.totalBytes);
         DBG_OUTPUT_PORT.printf(">> usedBytes: (%lu)\n", fs_info.usedBytes);
@@ -800,6 +803,7 @@ void setupSPIFFS() {
         DBG_OUTPUT_PORT.printf(">> maxSketchSpace 1: (%lu)\n", ESP.getFreeSketchSpace());
         DBG_OUTPUT_PORT.printf(">> maxSketchSpace 2: (%lu)\n", (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
         DBG_OUTPUT_PORT.printf(">> flashChipSize: (%lu)\n", ESP.getFlashChipSize());
+	DBG_OUTPUT_PORT.printf(">> freeHeapSize: (%lu)\n", ESP.getFreeHeap());
 
         Dir dir = SPIFFS.openDir("/");
         while (dir.next()) {
@@ -817,7 +821,8 @@ void setupTaskManager() {
 }
 
 void setupI2C() {
-    brzo_i2c_setup(FPGA_SDA, FPGA_SCL, CLOCK_STRETCH_TIMEOUT);
+    DBG_OUTPUT_PORT.printf(">> Setting up I2C master...\n");
+    brzo_i2c_setup(FPGA_I2C_SDA, FPGA_I2C_SCL, CLOCK_STRETCH_TIMEOUT);
 }
 
 void setup(void) {
@@ -833,6 +838,8 @@ void setup(void) {
     setupCredentials();
     setupWiFi();
     setupI2C();
+    // REMOVE ME:
+    testI2C();
     setupHTTPServer();
     
     if (strlen(otaPassword)) 
@@ -847,4 +854,9 @@ void setup(void) {
 void loop(void){
     ArduinoOTA.handle();
     taskManager.Loop();
+}
+
+void testI2C() {
+    writeToOSD(0, 2, (uint8_t*) "Hello World! Hello World! Hello World!  ");
+    setDisplayOSD(true);
 }

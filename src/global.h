@@ -3,8 +3,10 @@
 #define NCONFIG 5
 #define DBG_OUTPUT_PORT Serial
 
-#define FPGA_SCL 0
-#define FPGA_SDA 2
+#define FPGA_I2C_ADDR 0x3c
+#define FPGA_I2C_FREQ_KHZ 800
+#define FPGA_I2C_SCL 0
+#define FPGA_I2C_SDA 2
 #define CLOCK_STRETCH_TIMEOUT 200
 
 #define FIRMWARE_FILE "/firmware.dc"
