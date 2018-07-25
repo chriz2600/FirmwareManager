@@ -160,6 +160,7 @@ var finish = false;
 var scanlines = $('.scanlines');
 var tv = $('.tv');
 var term = $('#term').terminal(function(command, term) {
+    var match;
     if (command.match(/^\s*exit\s*$/)) {
         $('.tv').addClass('collapse');
         term.disable();
@@ -289,6 +290,18 @@ var term = $('#term').terminal(function(command, term) {
     } else if (command.match(/^\s*banner\s*$/)) {
         term.clear();
         term.greetings();
+    } else if (match = command.match(/^\s*osd\s*(on|off)\s*$/)) {
+        startTransaction(null, function() {
+            if (match[1] == "on") {
+                osdControl("on");
+            } else {
+                osdControl("off");
+            }
+        });
+    } else if (match = command.match(/^\s*osdwrite\s*([0-9]+)\s*([0-9]+)\s*"([^"]*)"\s*$/)) {
+        startTransaction(null, function() {
+            osdWrite(match[1], match[2], match[3]);
+        });
     } else if (command !== '') {
         term.error('unkown command, try:');
         help();
@@ -713,6 +726,31 @@ function getFlashChipSize() {
         endTransaction("Flash chip size: " + $.trim(data) + " Bytes");
     }).fail(function() {
         endTransaction('Error getting current config.', true);
+    });
+}
+
+function osdControl(state) {
+    $.ajax("/osd/" + state).done(function (data) {
+        endTransaction("OSD is " + state);
+    }).fail(function() {
+        endTransaction('Error switching OSD to ' + state, true);
+    });
+}
+
+function osdWrite(column, row, text) {
+    var data = {
+        'column': column,
+        'row': row,
+        'text': text
+    };
+    $.ajax({
+        'type': "POST",
+        'url': "/osdwrite",
+        'data': $.param(data, true)
+    }).done(function (data) {
+        endTransaction('[[b;#fff;]Done].\n');
+    }).fail(function() {
+        endTransaction('Error.', true);
     });
 }
 

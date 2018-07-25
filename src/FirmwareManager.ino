@@ -762,6 +762,36 @@ void setupHTTPServer() {
         }
     });
 
+    server.on("/osdwrite", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+
+        AsyncWebParameter *column = request->getParam("column", true);
+        AsyncWebParameter *row = request->getParam("row", true);
+        AsyncWebParameter *text = request->getParam("text", true);
+
+        writeToOSD(atoi(column->value().c_str()), atoi(row->value().c_str()), (uint8_t*) text->value().c_str());
+        request->send(200);
+    });
+
+
+    server.on("/osd/on", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        setDisplayOSD(true);
+        request->send(200);
+    });
+
+    server.on("/osd/off", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        setDisplayOSD(false);
+        request->send(200);
+    });
+
     AsyncStaticWebHandler* handler = &server
         .serveStatic("/", SPIFFS, "/")
         .setDefaultFile("index.html");
@@ -803,7 +833,7 @@ void setupSPIFFS() {
         DBG_OUTPUT_PORT.printf(">> maxSketchSpace 1: (%lu)\n", ESP.getFreeSketchSpace());
         DBG_OUTPUT_PORT.printf(">> maxSketchSpace 2: (%lu)\n", (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
         DBG_OUTPUT_PORT.printf(">> flashChipSize: (%lu)\n", ESP.getFlashChipSize());
-	DBG_OUTPUT_PORT.printf(">> freeHeapSize: (%lu)\n", ESP.getFreeHeap());
+        DBG_OUTPUT_PORT.printf(">> freeHeapSize: (%lu)\n", ESP.getFreeHeap());
 
         Dir dir = SPIFFS.openDir("/");
         while (dir.next()) {
@@ -838,8 +868,6 @@ void setup(void) {
     setupCredentials();
     setupWiFi();
     setupI2C();
-    // REMOVE ME:
-    testI2C();
     setupHTTPServer();
     
     if (strlen(otaPassword)) 
@@ -854,9 +882,4 @@ void setup(void) {
 void loop(void){
     ArduinoOTA.handle();
     taskManager.Loop();
-}
-
-void testI2C() {
-    writeToOSD(0, 2, (uint8_t*) "Hello World! Hello World! Hello World!  ");
-    setDisplayOSD(true);
 }
