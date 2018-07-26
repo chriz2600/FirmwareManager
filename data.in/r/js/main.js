@@ -941,12 +941,14 @@ function checkall(step) {
     }
 }
 
-function getFPGAFirmwareData(successCallback) {
+function getFPGAFirmwareData(successCallback, resultCallback) {
     getFirmwareData(
         "/etc/last_flash_md5",
         FIRMWARE_FILE,
         _getFPGAMD5File(),
-        function(lastFlashMd5, stagedMd5, origMd5) {
+          resultCallback 
+        ? function(lastFlashMd5, stagedMd5, origMd5) { resultCallback(lastFlashMd5, stagedMd5, origMd5); }
+        : function(lastFlashMd5, stagedMd5, origMd5) {
             endTransaction(
                 createCheckResult(lastFlashMd5, stagedMd5, origMd5, "FPGA firmware"),
                 false,
@@ -956,12 +958,14 @@ function getFPGAFirmwareData(successCallback) {
     );
 }
 
-function getESPFirmwareData(successCallback) {
+function getESPFirmwareData(successCallback, resultCallback) {
     getFirmwareData(
         "/etc/last_esp_flash_md5",
         ESP_FIRMWARE_FILE,
         _getESPMD5File(),
-        function(lastFlashMd5, stagedMd5, origMd5) {
+          resultCallback 
+        ? function(lastFlashMd5, stagedMd5, origMd5) { resultCallback(lastFlashMd5, stagedMd5, origMd5); }
+        : function(lastFlashMd5, stagedMd5, origMd5) {
             endTransaction(
                 createCheckResult(lastFlashMd5, stagedMd5, origMd5, "ESP firmware"),
                 false,
@@ -971,12 +975,14 @@ function getESPFirmwareData(successCallback) {
     );
 }
 
-function getESPIndexFirmwareData(successCallback) {
+function getESPIndexFirmwareData(successCallback, resultCallback) {
     getFirmwareData(
         "/index.html.gz.md5",
         ESP_INDEX_STAGING_FILE,
         _getESPIndexMD5File(),
-        function(lastFlashMd5, stagedMd5, origMd5) {
+          resultCallback 
+        ? function(lastFlashMd5, stagedMd5, origMd5) { resultCallback(lastFlashMd5, stagedMd5, origMd5); }
+        : function(lastFlashMd5, stagedMd5, origMd5) {
             endTransaction(
                 createCheckResult(lastFlashMd5, stagedMd5, origMd5, "ESP index.html"),
                 false,
@@ -1111,23 +1117,59 @@ function flashall(step) {
             });
             break;
         case 1:
-            term.echo("[[b;#fff;]Step 1/3:] Flashing FPGA firmware");
+            term.echo("[[b;#fff;]Step 1/3:]\nChecking FPGA firmware");
+            startTransaction(null, function() {
+                getFPGAFirmwareData(null, function(lastFlashMd5, stagedMd5, origMd5) {
+                    if (lastFlashMd5 == stagedMd5) {
+                        endTransaction('FPGA firmware is the same as the staged version.', false, function() { flashall(step + 2); });
+                    } else {
+                        endTransaction('FPGA firmware is older than the staged version.', false, function() { flashall(step + 1); });
+                    }
+                });
+            });
+            break;
+        case 2:
+            term.echo("Flashing FPGA firmware");
             startTransaction(null, function() {
                 flashFPGA(false, function() {
                     flashall(step + 1);
                 });
             });
             break;
-        case 2:
-            term.echo("[[b;#fff;]Step 2/3:] Flashing ESP firmware");
+        case 3:
+            term.echo("[[b;#fff;]Step 2/3:]\nChecking ESP firmware");
+            startTransaction(null, function() {
+                getESPFirmwareData(null, function(lastFlashMd5, stagedMd5, origMd5) {
+                    if (lastFlashMd5 == stagedMd5) {
+                        endTransaction('ESP firmware is the same as the staged version.', false, function() { flashall(step + 2); });
+                    } else {
+                        endTransaction('ESP firmware is older than the staged version.', false, function() { flashall(step + 1); });
+                    }
+                });
+            });
+            break;
+        case 4:
+            term.echo("Flashing ESP firmware");
             startTransaction(null, function() {
                 flashESP(function() {
                     flashall(step + 1);
                 });
             });
             break;
-        case 3:
-            term.echo("[[b;#fff;]Step 3/3:] Flashing ESP index.html");
+        case 5:
+            term.echo("[[b;#fff;]Step 3/3:]\nChecking ESP index.html");
+            startTransaction(null, function() {
+                getESPIndexFirmwareData(null, function(lastFlashMd5, stagedMd5, origMd5) {
+                    if (lastFlashMd5 == stagedMd5) {
+                        endTransaction('ESP index.html is the same as the staged version.', false, function() { flashall(step + 2); });
+                    } else {
+                        endTransaction('ESP index.html is older than the staged version.', false, function() { flashall(step + 1); });
+                    }
+                });
+            });
+            break;
+        case 6:
+            term.echo("Flashing ESP index.html");
             startTransaction(null, function() {
                 flashESPIndex(function() {
                     flashall(step + 1);
@@ -1150,23 +1192,59 @@ function downloadall(step) {
             });
             break;
         case 1:
-            term.echo("[[b;#fff;]Step 1/3:] Downloading FPGA firmware");
+            term.echo("[[b;#fff;]Step 1/3:]\nChecking FPGA firmware");
+            startTransaction(null, function() {
+                getFPGAFirmwareData(null, function(lastFlashMd5, stagedMd5, origMd5) {
+                    if (stagedMd5 == origMd5) {
+                        endTransaction('Staged FPGA firmware is already the newest version.', false, function() { downloadall(step + 2); });
+                    } else {
+                        endTransaction('Staged FPGA firmware is older than the newest version.', false, function() { downloadall(step + 1); });
+                    }
+                });
+            });
+            break;
+        case 2:
+            term.echo("Downloading FPGA firmware");
             startTransaction(null, function() {
                 downloadFPGA(function() {
                     downloadall(step + 1);
                 });
             });
             break;
-        case 2:
-            term.echo("[[b;#fff;]Step 2/3:] Downloading ESP firmware");
+        case 3:
+            term.echo("[[b;#fff;]Step 2/3:]\nChecking ESP firmware");
+            startTransaction(null, function() {
+                getESPFirmwareData(null, function(lastFlashMd5, stagedMd5, origMd5) {
+                    if (stagedMd5 == origMd5) {
+                        endTransaction('Staged ESP firmware is already the newest version.', false, function() { downloadall(step + 2); });
+                    } else {
+                        endTransaction('Staged ESP firmware is older than the newest version.', false, function() { downloadall(step + 1); });
+                    }
+                });
+            });
+            break;
+        case 4:
+            term.echo("Downloading ESP firmware");
             startTransaction(null, function() {
                 downloadESP(function() {
                     downloadall(step + 1);
                 });
             });
             break;
-        case 3:
-            term.echo("[[b;#fff;]Step 3/3:] Downloading ESP index.html");
+        case 5:
+            term.echo("[[b;#fff;]Step 3/3:]\nChecking ESP index.html");
+            startTransaction(null, function() {
+                getESPIndexFirmwareData(null, function(lastFlashMd5, stagedMd5, origMd5) {
+                    if (stagedMd5 == origMd5) {
+                        endTransaction('Staged ESP index.html is already the newest version.', false, function() { downloadall(step + 2); });
+                    } else {
+                        endTransaction('Staged ESP index.html is older than the newest version.', false, function() { downloadall(step + 1); });
+                    }
+                });
+            });
+            break;
+        case 6:
+            term.echo("Downloading ESP index.html");
             startTransaction(null, function() {
                 downloadESPIndex(function() {
                     downloadall(step + 1);
