@@ -18,8 +18,7 @@
 #include "FlashTask.h"
 #include "FlashESPTask.h"
 #include "FlashESPIndexTask.h"
-#include <brzo_i2c.h>
-#include "osd_ram.h"
+#include "FPGATask.h"
 
 #define DEFAULT_SSID ""
 #define DEFAULT_PASSWORD ""
@@ -35,6 +34,9 @@
 #define DEFAULT_CONF_IP_MASK ""
 #define DEFAULT_CONF_IP_DNS ""
 #define DEFAULT_HOST "dc-firmware-manager"
+
+// functions
+void setOSD(uint8_t value);
 
 char ssid[64] = DEFAULT_SSID;
 char password[64] = DEFAULT_PASSWORD;
@@ -64,14 +66,30 @@ File flashFile;
 bool headerFound = false;
 String header = String();
 
+bool OSDOpen = false;
 MD5Builder md5;
 TaskManager taskManager;
 FlashTask FlashTask(1);
 FlashESPTask FlashESPTask(1);
 FlashESPIndexTask FlashESPIndexTask(1);
 
+FPGATask FPGATask(1, [](uint8_t address, const uint8_t *buffer, uint8_t len) {
+    DBG_OUTPUT_PORT.printf("%i: %i %i \n", address, buffer[0], buffer[1]);
+    if (!OSDOpen && CHECK_BIT(buffer[1], 4)) {
+        setOSD(true);
+    }
+    if (OSDOpen && CHECK_BIT(buffer[0], 6)) {
+        setOSD(false);
+    }
+});
+
 int totalLength;
 int readLength;
+
+void setOSD(uint8_t value) {
+    OSDOpen = value;
+    FPGATask.ActivateDisplayOSD(value);
+}
 
 void _writeFile(const char *filename, const char *towrite, unsigned int len) {
     File f = SPIFFS.open(filename, "w");
@@ -771,16 +789,25 @@ void setupHTTPServer() {
         AsyncWebParameter *row = request->getParam("row", true);
         AsyncWebParameter *text = request->getParam("text", true);
 
-        writeToOSD(atoi(column->value().c_str()), atoi(row->value().c_str()), (uint8_t*) text->value().c_str());
+        FPGATask.DoWriteToOSD(atoi(column->value().c_str()), atoi(row->value().c_str()), (uint8_t*) text->value().c_str());
+
+        // // controller data, int16
+        // /*
+        //     15: a, 14: b, 13: x, 12: y, 11: up, 10: down, 09: left, 08: right
+        //     07: start, 06: ltrigger, 05: rtrigger, 04: trigger_osd
+        // */
+        // uint8_t buffer[128];
+        // readFromFPGA(0x85, buffer, 2);
+        // DBG_OUTPUT_PORT.printf("0x85: %i %i \n", buffer[0], buffer[1]);
+
         request->send(200);
     });
-
 
     server.on("/osd/on", HTTP_GET, [](AsyncWebServerRequest *request) {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        setDisplayOSD(true);
+        setOSD(true);
         request->send(200);
     });
 
@@ -788,7 +815,7 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        setDisplayOSD(false);
+        setOSD(false);
         request->send(200);
     });
 
@@ -850,11 +877,6 @@ void setupTaskManager() {
     taskManager.Setup();
 }
 
-void setupI2C() {
-    DBG_OUTPUT_PORT.printf(">> Setting up I2C master...\n");
-    brzo_i2c_setup(FPGA_I2C_SDA, FPGA_I2C_SCL, CLOCK_STRETCH_TIMEOUT);
-}
-
 void setup(void) {
 
     DBG_OUTPUT_PORT.begin(115200);
@@ -864,10 +886,10 @@ void setup(void) {
     pinMode(NCE, INPUT);    
     pinMode(NCONFIG, INPUT);
 
+    setupI2C();
     setupSPIFFS();
     setupCredentials();
     setupWiFi();
-    setupI2C();
     setupHTTPServer();
     
     if (strlen(otaPassword)) 
@@ -877,6 +899,8 @@ void setup(void) {
 
     setupTaskManager();
     DBG_OUTPUT_PORT.println(">> Ready.");
+    uint8_t buffer[2];
+    taskManager.StartTask(&FPGATask);
 }
 
 void loop(void){

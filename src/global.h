@@ -30,4 +30,6 @@
 
 #define FW_VERSION "__FW_VERSION__"
 
+#define CHECK_BIT(var,pos) ((var) & (1<<(pos)))
+
 #endif
