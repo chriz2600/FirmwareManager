@@ -35,9 +35,10 @@ class FPGATask : public Task {
             updateOSDContent = true;
         }
 
-        virtual void ActivateDisplayOSD(uint8_t value) {
-            OSDActivationValue = value;
-            updateOSDActivation = true;
+        virtual void Write(uint8_t address, uint8_t value) {
+            Address = address;
+            Value = value;
+            Update = true;
         }
 
     private:
@@ -54,9 +55,10 @@ class FPGATask : public Task {
         uint8_t towrite;
         uint8_t left;
         bool updateOSDContent;
-        bool updateOSDActivation;
+        bool Update;
 
-        uint8_t OSDActivationValue;
+        uint8_t Address;
+        uint8_t Value;
 
         virtual bool OnStart() {
             return true;
@@ -81,12 +83,12 @@ class FPGATask : public Task {
                 } else {
                     updateOSDContent = false;
                 }
-            } else if (updateOSDActivation) {
+            } else if (Update) {
                 uint8_t buffer[2];
-                buffer[0] = 0x81;
-                buffer[1] = OSDActivationValue;
+                buffer[0] = Address;
+                buffer[1] = Value;
                 brzo_i2c_write(buffer, 2, false);
-                updateOSDActivation = false;
+                Update = false;
             } else {
                 // update controller data
                 uint8_t buffer[1];

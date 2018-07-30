@@ -67,6 +67,7 @@ bool headerFound = false;
 String header = String();
 
 bool OSDOpen = false;
+uint8_t activeLine = 255;
 MD5Builder md5;
 TaskManager taskManager;
 FlashTask FlashTask(1);
@@ -78,8 +79,26 @@ FPGATask FPGATask(1, [](uint8_t address, const uint8_t *buffer, uint8_t len) {
     if (!OSDOpen && CHECK_BIT(buffer[1], 4)) {
         setOSD(true);
     }
-    if (OSDOpen && CHECK_BIT(buffer[0], 6)) {
-        setOSD(false);
+    if (OSDOpen) {
+        if (CHECK_BIT(buffer[0], 6)) {
+            setOSD(false);
+        }
+        if (CHECK_BIT(buffer[0], 3)) { // up
+            if (activeLine == 255) {
+                activeLine = 0;
+            } else {
+                activeLine = activeLine == 0 ? activeLine : activeLine - 1;
+            }
+            FPGATask.Write(0x82, activeLine);
+        }
+        if (CHECK_BIT(buffer[0], 2)) { // down
+            if (activeLine == 255) {
+                activeLine = 0;
+            } else {
+                activeLine = activeLine == 23 ? activeLine : activeLine + 1;
+            }
+            FPGATask.Write(0x82, activeLine);
+        }
     }
 });
 
@@ -88,7 +107,7 @@ int readLength;
 
 void setOSD(uint8_t value) {
     OSDOpen = value;
-    FPGATask.ActivateDisplayOSD(value);
+    FPGATask.Write(0x81, value);
 }
 
 void _writeFile(const char *filename, const char *towrite, unsigned int len) {
@@ -887,6 +906,7 @@ void setup(void) {
     pinMode(NCONFIG, INPUT);
 
     setupI2C();
+    setOSD(false);
     setupSPIFFS();
     setupCredentials();
     setupWiFi();
