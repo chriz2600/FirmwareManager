@@ -5,6 +5,8 @@
 #include <brzo_i2c.h>
 
 #define MAX_ADDR_SPACE 128
+#define FIRST_REPEAT_DELAY 500
+#define REPEAT_DELAY 200
 
 typedef std::function<void(uint8_t address, const uint8_t *buffer, uint8_t len)> FPGAEventHandlerFunction;
 
@@ -60,6 +62,9 @@ class FPGATask : public Task {
         uint8_t Address;
         uint8_t Value;
 
+        long eTime;
+        uint8_t repeatCount;
+
         virtual bool OnStart() {
             return true;
         }
@@ -96,8 +101,24 @@ class FPGATask : public Task {
                 buffer[0] = 0x85;
                 brzo_i2c_write(buffer, 1, false);
                 brzo_i2c_read(buffer2, 2, false);
-                if (buffer2[0] != data_out[0] || buffer2[1] != data_out[1]) {
+                // new controller data
+                if (buffer2[0] != data_out[0]
+                 || buffer2[1] != data_out[1])
+                {
+                    // reset repeat
                     controller_handler(0x85, buffer2, 2);
+                    eTime = millis();
+                    repeatCount = 0;
+                } else {
+                    // check repeat
+                    if (buffer2[0] != 0x00 || buffer2[1] != 0x00) {
+                        long duration = (repeatCount == 0 ? FIRST_REPEAT_DELAY : REPEAT_DELAY);
+                        if (millis() - eTime > duration) {
+                            controller_handler(0x85, buffer2, 2);
+                            eTime = millis();
+                            repeatCount++;
+                        }
+                    }
                 }
                 memcpy(data_out, buffer2, 2);
             }
