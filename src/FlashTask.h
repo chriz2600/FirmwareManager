@@ -42,6 +42,7 @@ class FlashTask : public Task {
             totalLength = -1;
             readLength = 0;
             prevPercentComplete = -1;
+            last_error = 0;
             // local
             chunk_size = 0;
             bytes_in_result = 0;

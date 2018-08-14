@@ -636,8 +636,6 @@ var setupDataMapping = {
     ota_pass:         [ "OTA Password     ", "empty" ],
     firmware_server:  [ "Firmware Server  ", "dc.i74.de" ],
     firmware_version: [ "Firmware Version ", "master" ],
-    firmware_fpga:    [ "Firmware FPGA    ", "10CL025" ],
-    firmware_format:  [ "Firmware Format  ", "VGA" ],
     http_auth_user:   [ "HTTP User        ", "Test" ],
     http_auth_pass:   [ "HTTP Password    ", "testtest" ],
     conf_ip_addr:     [ "IP address       ", "empty" ],
@@ -895,8 +893,7 @@ function _getFPGAMD5File() {
     return (
           "//" + currentConfigData["firmware_server"]
         + "/fw/" + currentConfigData["firmware_version"]
-        + "/DCxPlus-" + currentConfigData["firmware_fpga"]
-        + "-" + currentConfigData["firmware_format"]
+        + "/DCxPlus-default"
         + "." + FIRMWARE_EXTENSION + ".md5?cc=" + Math.random()
     );
 }
@@ -914,7 +911,7 @@ function _getESPMD5File() {
 function _getESPIndexMD5File() {
     return (
           "//esp.i74.de"
-	+ "/" + currentConfigData["firmware_version"]
+        + "/" + currentConfigData["firmware_version"]
         + "/" + ESP_INDEX_STAGING_FILE + ".md5?cc=" + Math.random()
     );
 }
@@ -1101,6 +1098,7 @@ function pingESP(successCallback) {
         successCallback();
     }).fail(function() {
         term.set_prompt("Waiting for ESP to restart (" + (retryTimeout) + ")");
+        $('#term').scrollTop($('#term').prop('scrollHeight'));
         retryTimeout--;
         if (retryTimeout > 0) {
             pingESP(successCallback);

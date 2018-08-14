@@ -25,8 +25,6 @@
 #define DEFAULT_OTA_PASSWORD ""
 #define DEFAULT_FW_SERVER "dc.i74.de"
 #define DEFAULT_FW_VERSION "master"
-#define DEFAULT_FW_FPGA "10CL025"
-#define DEFAULT_FW_FORMAT "VGA"
 #define DEFAULT_HTTP_USER "Test"
 #define DEFAULT_HTTP_PASS "testtest"
 #define DEFAULT_CONF_IP_ADDR ""
@@ -43,8 +41,6 @@ char password[64] = DEFAULT_PASSWORD;
 char otaPassword[64] = DEFAULT_OTA_PASSWORD; 
 char firmwareServer[1024] = DEFAULT_FW_SERVER;
 char firmwareVersion[64] = DEFAULT_FW_VERSION;
-char firmwareFPGA[64] = DEFAULT_FW_FPGA;
-char firmwareFormat[64] = DEFAULT_FW_FORMAT;
 char httpAuthUser[64] = DEFAULT_HTTP_USER;
 char httpAuthPass[64] = DEFAULT_HTTP_PASS;
 char confIPAddr[24] = DEFAULT_CONF_IP_ADDR;
@@ -149,8 +145,6 @@ void setupCredentials(void) {
     _readFile("/etc/ota_pass", otaPassword, 64, DEFAULT_OTA_PASSWORD);
     _readFile("/etc/firmware_server", firmwareServer, 1024, DEFAULT_FW_SERVER);
     _readFile("/etc/firmware_version", firmwareVersion, 64, DEFAULT_FW_VERSION);
-    _readFile("/etc/firmware_fpga", firmwareFPGA, 64, DEFAULT_FW_FPGA);
-    _readFile("/etc/firmware_format", firmwareFormat, 64, DEFAULT_FW_FORMAT);
     _readFile("/etc/http_auth_user", httpAuthUser, 64, DEFAULT_HTTP_USER);
     _readFile("/etc/http_auth_pass", httpAuthPass, 64, DEFAULT_HTTP_PASS);
     _readFile("/etc/conf_ip_addr", confIPAddr, 24, DEFAULT_CONF_IP_ADDR);
@@ -166,8 +160,6 @@ void setupCredentials(void) {
         DBG_OUTPUT_PORT.printf("| /etc/ota_pass         -> otaPassword:     [%s]\n", otaPassword);
         DBG_OUTPUT_PORT.printf("| /etc/firmware_server  -> firmwareServer:  [%s]\n", firmwareServer);
         DBG_OUTPUT_PORT.printf("| /etc/firmware_version -> firmwareVersion: [%s]\n", firmwareVersion);
-        DBG_OUTPUT_PORT.printf("| /etc/firmware_fpga    -> firmwareFPGA:    [%s]\n", firmwareFPGA);
-        DBG_OUTPUT_PORT.printf("| /etc/firmware_format  -> firmwareFormat:  [%s]\n", firmwareFormat);
         DBG_OUTPUT_PORT.printf("| /etc/http_auth_user   -> httpAuthUser:    [%s]\n", httpAuthUser);
         DBG_OUTPUT_PORT.printf("| /etc/http_auth_pass   -> httpAuthPass:    [%s]\n", httpAuthPass);
         DBG_OUTPUT_PORT.printf("| /etc/conf_ip_addr     -> confIPAddr:      [%s]\n", confIPAddr);
@@ -301,8 +293,7 @@ void handleESPIndexFlash(AsyncWebServerRequest *request) {
 void handleFPGADownload(AsyncWebServerRequest *request) {
     String httpGet = "GET /fw/" 
         + String(firmwareVersion) 
-        + "/DCxPlus-" + String(firmwareFPGA) 
-        + "-" + String(firmwareFormat) 
+        + "/DCxPlus-default"
         + "." + FIRMWARE_EXTENSION 
         + " HTTP/1.0\r\nHost: dc.i74.de\r\n\r\n";
 
@@ -334,6 +325,7 @@ void _handleDownload(AsyncWebServerRequest *request, const char *filename, Strin
     header = String();
     totalLength = -1;
     readLength = -1;
+    last_error = 0;
     md5.begin();
     flashFile = SPIFFS.open(filename, "w");
 
@@ -676,6 +668,9 @@ void setupHTTPServer() {
         SPIFFS.remove(String(FIRMWARE_FILE) + ".md5");
         SPIFFS.remove(String(ESP_FIRMWARE_FILE) + ".md5");
         SPIFFS.remove(String(ESP_INDEX_STAGING_FILE) + ".md5");
+        // remove legacy config data
+        SPIFFS.remove("/etc/firmware_fpga");
+        SPIFFS.remove("/etc/firmware_format");
         request->send(200);
     });
 
@@ -746,8 +741,6 @@ void setupHTTPServer() {
         writeSetupParameter(request, "ota_pass", otaPassword, 64, DEFAULT_OTA_PASSWORD);
         writeSetupParameter(request, "firmware_server", firmwareServer, 1024, DEFAULT_FW_SERVER);
         writeSetupParameter(request, "firmware_version", firmwareVersion, 64, DEFAULT_FW_VERSION);
-        writeSetupParameter(request, "firmware_fpga", firmwareFPGA, 64, DEFAULT_FW_FPGA);
-        writeSetupParameter(request, "firmware_format", firmwareFormat, 64, DEFAULT_FW_FORMAT);
         writeSetupParameter(request, "http_auth_user", httpAuthUser, 64, DEFAULT_HTTP_USER);
         writeSetupParameter(request, "http_auth_pass", httpAuthPass, 64, DEFAULT_HTTP_PASS);
         writeSetupParameter(request, "conf_ip_addr", confIPAddr, 24, DEFAULT_CONF_IP_ADDR);
@@ -773,8 +766,6 @@ void setupHTTPServer() {
         root["ota_pass"] = otaPassword;
         root["firmware_server"] = firmwareServer;
         root["firmware_version"] = firmwareVersion;
-        root["firmware_fpga"] = firmwareFPGA;
-        root["firmware_format"] = firmwareFormat;
         root["http_auth_user"] = httpAuthUser;
         root["http_auth_pass"] = httpAuthPass;
         root["flash_chip_size"] = ESP.getFlashChipSize();
