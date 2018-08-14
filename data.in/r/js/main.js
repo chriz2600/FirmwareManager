@@ -275,6 +275,22 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             getConfig(false, downloadESPIndex);
         });
+    } else if (command.match(/^\s*res_vga\s*$/)) {
+        startTransaction(null, function() {
+            setResolution("VGA");
+        });
+    } else if (command.match(/^\s*res_480p\s*$/)) {
+        startTransaction(null, function() {
+            setResolution("480p");
+        });
+    } else if (command.match(/^\s*res_960p\s*$/)) {
+        startTransaction(null, function() {
+            setResolution("960p");
+        });
+    } else if (command.match(/^\s*res_1080p\s*$/)) {
+        startTransaction(null, function() {
+            setResolution("1080p");
+        });
     } else if (command.match(/^\s*details\s*$/)) {
         typed_message(term,
               getHelpDetailsFPGA()
@@ -751,6 +767,14 @@ function osdWrite(column, row, text) {
         endTransaction('[[b;#fff;]Done].\n');
     }).fail(function() {
         endTransaction('Error.', true);
+    });
+}
+
+function setResolution(type) {
+    $.ajax("/res/" + type).done(function (data) {
+        endTransaction("Switched resolution to: " + type);
+    }).fail(function() {
+        endTransaction('Error switching resolution.', true);
     });
 }
 

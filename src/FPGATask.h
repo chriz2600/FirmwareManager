@@ -123,7 +123,8 @@ class FPGATask : public Task {
                 memcpy(data_out, buffer2, 2);
             }
             if (brzo_i2c_end_transaction()) {
-                last_error = ERROR_WRONG_VERSION;
+                last_error = ERROR_END_I2C_TRANSACTION;
+                DBG_OUTPUT_PORT.printf("ERROR_END_I2C_TRANSACTION\n");
             }
         }
 

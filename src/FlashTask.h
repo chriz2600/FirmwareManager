@@ -55,6 +55,7 @@ class FlashTask : public Task {
                 // check "magic"
                 if (header[0] != 'D' || header[1] != 'C' || header[2] != 0x07 || header[3] != 0x04) {
                     last_error = ERROR_WRONG_MAGIC;
+                    // TODO: report header bytes via DEBUG
                     return false;
                 }
 

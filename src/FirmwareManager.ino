@@ -110,6 +110,10 @@ void setOSD(uint8_t value) {
     FPGATask.Write(0x81, value);
 }
 
+void switchResolution(uint8_t value) {
+    FPGATask.Write(0x83, value);
+}
+
 void _writeFile(const char *filename, const char *towrite, unsigned int len) {
     File f = SPIFFS.open(filename, "w");
     if (f) {
@@ -835,6 +839,38 @@ void setupHTTPServer() {
             return request->requestAuthentication();
         }
         setOSD(false);
+        request->send(200);
+    });
+
+    server.on("/res/VGA", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        switchResolution(RESOLUTION_VGA);
+        request->send(200);
+    });
+
+    server.on("/res/480p", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        switchResolution(RESOLUTION_480p);
+        request->send(200);
+    });
+
+    server.on("/res/960p", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        switchResolution(RESOLUTION_960p);
+        request->send(200);
+    });
+
+    server.on("/res/1080p", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        switchResolution(RESOLUTION_1080p);
         request->send(200);
     });
 

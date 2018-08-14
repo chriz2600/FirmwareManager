@@ -1,5 +1,5 @@
-#ifndef SPI_FLASH_H
-#define SPI_FLASH_H
+#ifndef SPI_FLASHY_H
+#define SPI_FLASHY_H
 
 #include <Arduino.h>
 #include <SPI.h>
