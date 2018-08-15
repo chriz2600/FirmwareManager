@@ -13,6 +13,7 @@
 
 typedef std::function<void(uint16_t controller_data)> FPGAEventHandlerFunction;
 typedef std::function<void(uint8_t Address, uint8_t Value)> WriteCallbackHandlerFunction;
+typedef std::function<void(uint8_t address, uint8_t* buffer, uint8_t len)> ReadCallbackHandlerFunction;
 typedef std::function<void()> WriteOSDCallbackHandlerFunction;
 
 void setupI2C() {
@@ -59,10 +60,18 @@ class FPGATask : public Task {
             write_callback = handler;
         }
 
+        virtual void Read(uint8_t address, uint8_t len, ReadCallbackHandlerFunction handler) {
+            Address = address;
+            Value = len;
+            DoRead = true;
+            read_callback = handler;
+        }
+
     private:
         FPGAEventHandlerFunction controller_handler;
         WriteCallbackHandlerFunction write_callback;
         WriteOSDCallbackHandlerFunction write_osd_callback;
+        ReadCallbackHandlerFunction read_callback;
 
         uint8_t *data_in;
 
@@ -76,6 +85,7 @@ class FPGATask : public Task {
         uint8_t towrite;
         bool updateOSDContent;
         bool Update;
+        bool DoRead;
 
         uint8_t Address;
         uint8_t Value;
@@ -120,6 +130,18 @@ class FPGATask : public Task {
                 Update = false;
                 if (write_callback != NULL) {
                     write_callback(Address, Value);
+                }
+            } else if (DoRead) {
+                // Value is read len here
+                DBG_OUTPUT_PORT.printf("Read: %x %x\n", Address, Value);
+                uint8_t buffer[1];
+                uint8_t buffer2[Value];
+                buffer[0] = Address;
+                brzo_i2c_write(buffer, 1, false);
+                brzo_i2c_read(buffer2, Value, false);
+                DoRead = false;
+                if (read_callback != NULL) {
+                    read_callback(Address, buffer2, Value);
                 }
             } else {
                 // update controller data

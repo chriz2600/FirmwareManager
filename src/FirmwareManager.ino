@@ -63,6 +63,7 @@ bool headerFound = false;
 String header = String();
 
 bool OSDOpen = false;
+uint8_t OSDCurrentResolution = RESOLUTION_1080p;
 uint8_t menu_activeLine = 255;
 MD5Builder md5;
 TaskManager taskManager;
@@ -71,61 +72,98 @@ FlashESPTask flashESPTask(1);
 FlashESPIndexTask flashESPIndexTask(1);
 
 extern Menu mainMenu;
+Menu *currentMenu;
 // functions
 void setOSD(bool value, WriteCallbackHandlerFunction handler);
 void switchResolution(uint8_t value);
 
-Menu *currentMenu;
-Menu outputResMenu((uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](uint16_t controller_data) {
-    if (CHECK_BIT(controller_data, CTRLR_BUTTON_B)) {
+void openOSD() {
+    currentMenu = &mainMenu;
+    setOSD(true, [](uint8_t Address, uint8_t Value) {
+        currentMenu->Display();
+    });
+}
+
+void closeOSD() {
+    setOSD(false, NULL);
+}
+
+Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](uint16_t controller_data) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         currentMenu = &mainMenu;
         currentMenu->Display();
+        return;
     }
-    if (CHECK_BIT(controller_data, CTRLR_BUTTON_A)) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
+        uint8_t value = RESOLUTION_1080p;
+
         switch (menu_activeLine) {
             case 11:
-                switchResolution(RESOLUTION_VGA);
+                value = RESOLUTION_VGA;
                 break;
             case 12:
-                switchResolution(RESOLUTION_480p);
+                value = RESOLUTION_480p;
                 break;
             case 13:
-                switchResolution(RESOLUTION_960p);
+                value = RESOLUTION_960p;
                 break;
             case 14:
-                switchResolution(RESOLUTION_1080p);
+                value = RESOLUTION_1080p;
                 break;
         }
+
+        OSDCurrentResolution = value;
+        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, value, [](uint8_t Address, uint8_t Value) {
+            DBG_OUTPUT_PORT.printf("switch resolution callback!\n");
+        });
         return;
     }
+}, [](uint8_t address, uint8_t value) {
+    DBG_OUTPUT_PORT.printf("Here in output res menu display callback!\n");
+    menu_activeLine = 14 - OSDCurrentResolution;
+    fpgaTask.Write(I2C_OSD_ACTIVE_LINE, menu_activeLine);
+    // char buffer[521] = OSD_OUTPUT_RES_MENU;
+    // buffer[menu_activeLine*40] = ">";
+    // currentMenu->SetMenuText((uint8_t*) buffer);
+    //currentMenu->Display(false, NULL);
 });
-Menu mainMenu((uint8_t*) OSD_MAIN_MENU, 11, 12, [](uint16_t controller_data) {
-    if (CHECK_BIT(controller_data, CTRLR_BUTTON_B)) {
-        setOSD(false, NULL);
+
+Menu debugMenu("DebugMenu", (uint8_t*) OSD_DEBUG_MENU, 255, 255, [](uint16_t controller_data) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        currentMenu = &mainMenu;
+        currentMenu->Display();
         return;
     }
-    if (CHECK_BIT(controller_data, CTRLR_BUTTON_A)) {
+}, NULL);
+
+Menu mainMenu("MainMenu", (uint8_t*) OSD_MAIN_MENU, 11, 12, [](uint16_t controller_data) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        closeOSD();
+        return;
+    }
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
         switch (menu_activeLine) {
             case 11:
                 currentMenu = &outputResMenu;
                 currentMenu->Display();
                 break;
             case 12:
+                currentMenu = &debugMenu;
+                currentMenu->Display();
                 break;
         }
         return;
     }
-});
+}, NULL);
 
 FPGATask fpgaTask(1, [](uint16_t controller_data) {
-    DBG_OUTPUT_PORT.printf("%x\n", controller_data);
+    DBG_OUTPUT_PORT.printf("--> %u %x \n", OSDOpen, controller_data);
     if (!OSDOpen && CHECK_BIT(controller_data, CTRLR_TRIGGER_OSD)) {
-        currentMenu = &mainMenu;
-        setOSD(true, [](uint8_t Address, uint8_t Value) {
-            currentMenu->Display();
-        });
+        openOSD();
+        return;
     }
     if (OSDOpen) {
+        DBG_OUTPUT_PORT.printf("Menu: %s %x\n", currentMenu->Name(), controller_data);
         currentMenu->HandleClick(controller_data);
     }
 });
@@ -840,7 +878,7 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        setOSD(true, NULL);
+        openOSD();
         request->send(200);
     });
 
@@ -848,7 +886,7 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        setOSD(false, NULL);
+        closeOSD();
         request->send(200);
     });
 
@@ -939,6 +977,9 @@ void setupSPIFFS() {
 void setupTaskManager() {
     DBG_OUTPUT_PORT.printf(">> Setting up task manager...\n");
     taskManager.Setup();
+    // prepare osd
+    closeOSD();
+    taskManager.StartTask(&fpgaTask);
 }
 
 void setup(void) {
@@ -951,7 +992,7 @@ void setup(void) {
     pinMode(NCONFIG, INPUT);
 
     setupI2C();
-    setOSD(false, NULL);
+    setupTaskManager();
     setupSPIFFS();
     setupCredentials();
     setupWiFi();
@@ -962,9 +1003,8 @@ void setup(void) {
         setupArduinoOTA();
     }
 
-    setupTaskManager();
     DBG_OUTPUT_PORT.println(">> Ready.");
-    taskManager.StartTask(&fpgaTask);
+    
 }
 
 void loop(void){

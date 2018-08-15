@@ -31,7 +31,8 @@
 
 #define FW_VERSION "__FW_VERSION__"
 
-#define CHECK_BIT(var,pos) ((var) & (1<<(pos)))
+#define CHECK_BIT(var,pos) ((var) & (pos))
+#define CHECK_MASK(var,pos) ((var) == (pos))
 
 #define FPGA_UPDATE_OSD_DONE 0x00
 #define FPGA_WRITE_DONE ((uint8_t) 0x01)
@@ -51,17 +52,17 @@
 //     15: a, 14: b, 13: x, 12: y, 11: up, 10: down, 09: left, 08: right
 //     07: start, 06: ltrigger, 05: rtrigger, 04: trigger_osd
 // */
-#define CTRLR_BUTTON_A (15)
-#define CTRLR_BUTTON_B (14)
-#define CTRLR_BUTTON_X (13)
-#define CTRLR_BUTTON_Y (12)
-#define CTRLR_PAD_UP (11)
-#define CTRLR_PAD_DOWN (10)
-#define CTRLR_PAD_LEFT (9)
-#define CTRLR_PAD_RIGHT (8)
-#define CTRLR_BUTTON_START (7)
-#define CTRLR_LTRIGGER (6)
-#define CTRLR_RTRIGGER (5)
-#define CTRLR_TRIGGER_OSD (4)
+#define CTRLR_BUTTON_A (1<<(15))
+#define CTRLR_BUTTON_B (1<<(14))
+#define CTRLR_BUTTON_X (1<<(13))
+#define CTRLR_BUTTON_Y (1<<(12))
+#define CTRLR_PAD_UP (1<<(11))
+#define CTRLR_PAD_DOWN (1<<(10))
+#define CTRLR_PAD_LEFT (1<<(9))
+#define CTRLR_PAD_RIGHT (1<<(8))
+#define CTRLR_BUTTON_START (1<<(7))
+#define CTRLR_LTRIGGER (1<<(6))
+#define CTRLR_RTRIGGER (1<<(5))
+#define CTRLR_TRIGGER_OSD (1<<(4))
 
 #endif
