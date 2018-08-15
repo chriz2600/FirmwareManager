@@ -38,7 +38,7 @@ void brzo_i2c_start_transaction(uint8_t addr, int speed);
 void brzo_i2c_write(const uint8_t *data, uint8_t len, uint8_t rs);
 int brzo_i2c_end_transaction();
 
-#include "../src/osd_ram.h"
+#include "osd_ram.h"
 
 void brzo_i2c_start_transaction(uint8_t addr, int speed) {
     printf("writing to %02x with %u kHz\n", addr, speed);

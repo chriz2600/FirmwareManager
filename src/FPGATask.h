@@ -1,3 +1,6 @@
+#ifndef FPGA_TASK_H
+#define FPGA_TASK_H
+
 #include <global.h>
 #include <Task.h>
 #include <inttypes.h>
@@ -8,7 +11,9 @@
 #define REPEAT_DELAY 250
 #define REPEAT_RATE 100
 
-typedef std::function<void(uint8_t address, const uint8_t *buffer, uint8_t len)> FPGAEventHandlerFunction;
+typedef std::function<void(uint16_t controller_data)> FPGAEventHandlerFunction;
+typedef std::function<void(uint8_t Address, uint8_t Value)> WriteCallbackHandlerFunction;
+typedef std::function<void()> WriteOSDCallbackHandlerFunction;
 
 void setupI2C() {
     DBG_OUTPUT_PORT.printf(">> Setting up I2C master...\n");
@@ -25,37 +30,50 @@ class FPGATask : public Task {
             controller_handler(chandler)
         { };
 
-        virtual void DoWriteToOSD(uint8_t column, uint8_t row, uint8_t charData[]) { 
+        virtual void DoWriteToOSD(uint8_t column, uint8_t row, uint8_t charData[]) {
+            DoWriteToOSD(column, row, charData, NULL);
+        }
+
+        virtual void DoWriteToOSD(uint8_t column, uint8_t row, uint8_t charData[], WriteOSDCallbackHandlerFunction handler) {
+            DBG_OUTPUT_PORT.printf("DoWriteToOSD: %u %u %u\n", column, row, strlen((char*) charData));
             if (column > 39) { column = 39; }
             if (row > 23) { row = 23; }
 
-            len = strlen((char*) charData);
+            stringLength = strlen((char*) charData);
             localAddress = row * 40 + column;
-            left = len;
-            data_in = (uint8_t*) malloc(len);
-            memcpy(data_in, charData, len);
+            left = stringLength;
+            data_in = (uint8_t*) malloc(stringLength);
+            memcpy(data_in, charData, stringLength);
             updateOSDContent = true;
+            write_osd_callback = handler;
         }
 
         virtual void Write(uint8_t address, uint8_t value) {
+            Write(address, value, NULL);
+        }
+
+        virtual void Write(uint8_t address, uint8_t value, WriteCallbackHandlerFunction handler) {
             Address = address;
             Value = value;
             Update = true;
+            write_callback = handler;
         }
 
     private:
         FPGAEventHandlerFunction controller_handler;
+        WriteCallbackHandlerFunction write_callback;
+        WriteOSDCallbackHandlerFunction write_osd_callback;
 
         uint8_t *data_in;
 
-        uint8_t data_out[128];
-        uint8_t data_write[128];
-        uint8_t len;
+        uint8_t data_out[MAX_ADDR_SPACE+1];
+        uint8_t data_write[MAX_ADDR_SPACE+1];
+        uint16_t stringLength;
+        uint16_t left;
         uint16_t localAddress;
         uint8_t upperAddress;
         uint8_t lowerAddress;
         uint8_t towrite;
-        uint8_t left;
         bool updateOSDContent;
         bool Update;
 
@@ -72,28 +90,37 @@ class FPGATask : public Task {
         virtual void OnUpdate(uint32_t deltaTime) {
             brzo_i2c_start_transaction(FPGA_I2C_ADDR, FPGA_I2C_FREQ_KHZ);
             if (updateOSDContent) {
+                DBG_OUTPUT_PORT.printf("updateOSDContent: stringLength: %u, left: %u\n", stringLength, left);
                 if (left > 0) {
                     upperAddress = localAddress / MAX_ADDR_SPACE;
                     lowerAddress = localAddress % MAX_ADDR_SPACE;
-                    data_write[0] = 0x80;
+                    data_write[0] = I2C_OSD_ADDR_OFFSET;
                     data_write[1] = upperAddress;
                     brzo_i2c_write(data_write, 2, false);
                     data_write[0] = lowerAddress;
                     towrite = MAX_ADDR_SPACE - lowerAddress;
                     if (towrite > left) { towrite = left; }
-                    memcpy(&data_write[1], &data_in[len-left], towrite);
+                    memcpy(&data_write[1], &data_in[stringLength-left], towrite);
                     brzo_i2c_write(data_write, towrite + 1, false);
                     left -= towrite;
                     localAddress += towrite;
                 } else {
+                    free(data_in); data_in = NULL;
                     updateOSDContent = false;
+                    if (write_osd_callback != NULL) {
+                        write_osd_callback();
+                    }
                 }
             } else if (Update) {
+                DBG_OUTPUT_PORT.printf("Update: %x %x\n", Address, Value);
                 uint8_t buffer[2];
                 buffer[0] = Address;
                 buffer[1] = Value;
                 brzo_i2c_write(buffer, 2, false);
                 Update = false;
+                if (write_callback != NULL) {
+                    write_callback(Address, Value);
+                }
             } else {
                 // update controller data
                 uint8_t buffer[1];
@@ -106,15 +133,15 @@ class FPGATask : public Task {
                  || buffer2[1] != data_out[1])
                 {
                     // reset repeat
-                    controller_handler(0x85, buffer2, 2);
+                    controller_handler(buffer2[0] << 8 | buffer2[1]);
                     eTime = millis();
                     repeatCount = 0;
                 } else {
                     // check repeat
                     if (buffer2[0] != 0x00 || buffer2[1] != 0x00) {
-                        long duration = (repeatCount == 0 ? REPEAT_DELAY : REPEAT_RATE);
+                        unsigned long duration = (repeatCount == 0 ? REPEAT_DELAY : REPEAT_RATE);
                         if (millis() - eTime > duration) {
-                            controller_handler(0x85, buffer2, 2);
+                            controller_handler(buffer2[0] << 8 | buffer2[1]);
                             eTime = millis();
                             repeatCount++;
                         }
@@ -129,8 +156,11 @@ class FPGATask : public Task {
         }
 
         virtual void OnStop() {
+            DBG_OUTPUT_PORT.printf("OnStop\n");
             if (data_in != NULL) {
                 free(data_in);
             }
         }
 };
+
+#endif

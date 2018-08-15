@@ -1,3 +1,6 @@
+#ifndef FLASH_ESP_TASK_H
+#define FLASH_ESP_TASK_H
+
 #include <global.h>
 #include <Task.h>
 
@@ -34,7 +37,7 @@ class FlashESPTask : public Task {
             readLength = 0;
             prevPercentComplete = -1;
             last_error = 0;
-            
+
             md5.begin();
             flashFile = SPIFFS.open(ESP_FIRMWARE_FILE, "r");
 
@@ -88,3 +91,5 @@ class FlashESPTask : public Task {
             DBG_OUTPUT_PORT.printf("2: flashing ESP finished.\n");
         }
 };
+
+#endif

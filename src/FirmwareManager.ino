@@ -19,6 +19,7 @@
 #include "FlashESPTask.h"
 #include "FlashESPIndexTask.h"
 #include "FPGATask.h"
+#include "Menu.h"
 
 #define DEFAULT_SSID ""
 #define DEFAULT_PASSWORD ""
@@ -32,9 +33,6 @@
 #define DEFAULT_CONF_IP_MASK ""
 #define DEFAULT_CONF_IP_DNS ""
 #define DEFAULT_HOST "dc-firmware-manager"
-
-// functions
-void setOSD(uint8_t value);
 
 char ssid[64] = DEFAULT_SSID;
 char password[64] = DEFAULT_PASSWORD;
@@ -56,6 +54,8 @@ String fname;
 AsyncWebServer server(80);
 SPIFlash flash(CS);
 int last_error = 0; 
+int totalLength;
+int readLength;
 
 static AsyncClient *aClient = NULL;
 File flashFile;
@@ -63,51 +63,80 @@ bool headerFound = false;
 String header = String();
 
 bool OSDOpen = false;
-uint8_t activeLine = 255;
+uint8_t menu_activeLine = 255;
 MD5Builder md5;
 TaskManager taskManager;
-FlashTask FlashTask(1);
-FlashESPTask FlashESPTask(1);
-FlashESPIndexTask FlashESPIndexTask(1);
+FlashTask flashTask(1);
+FlashESPTask flashESPTask(1);
+FlashESPIndexTask flashESPIndexTask(1);
 
-FPGATask FPGATask(1, [](uint8_t address, const uint8_t *buffer, uint8_t len) {
-    DBG_OUTPUT_PORT.printf("%i: %i %i \n", address, buffer[0], buffer[1]);
-    if (!OSDOpen && CHECK_BIT(buffer[1], 4)) {
-        setOSD(true);
+extern Menu mainMenu;
+// functions
+void setOSD(bool value, WriteCallbackHandlerFunction handler);
+void switchResolution(uint8_t value);
+
+Menu *currentMenu;
+Menu outputResMenu((uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](uint16_t controller_data) {
+    if (CHECK_BIT(controller_data, CTRLR_BUTTON_B)) {
+        currentMenu = &mainMenu;
+        currentMenu->Display();
     }
-    if (OSDOpen) {
-        if (CHECK_BIT(buffer[0], 6)) {
-            setOSD(false);
+    if (CHECK_BIT(controller_data, CTRLR_BUTTON_A)) {
+        switch (menu_activeLine) {
+            case 11:
+                switchResolution(RESOLUTION_VGA);
+                break;
+            case 12:
+                switchResolution(RESOLUTION_480p);
+                break;
+            case 13:
+                switchResolution(RESOLUTION_960p);
+                break;
+            case 14:
+                switchResolution(RESOLUTION_1080p);
+                break;
         }
-        if (CHECK_BIT(buffer[0], 3)) { // up
-            if (activeLine == 255) {
-                activeLine = 0;
-            } else {
-                activeLine = activeLine == 0 ? activeLine : activeLine - 1;
-            }
-            FPGATask.Write(0x82, activeLine);
+        return;
+    }
+});
+Menu mainMenu((uint8_t*) OSD_MAIN_MENU, 11, 12, [](uint16_t controller_data) {
+    if (CHECK_BIT(controller_data, CTRLR_BUTTON_B)) {
+        setOSD(false, NULL);
+        return;
+    }
+    if (CHECK_BIT(controller_data, CTRLR_BUTTON_A)) {
+        switch (menu_activeLine) {
+            case 11:
+                currentMenu = &outputResMenu;
+                currentMenu->Display();
+                break;
+            case 12:
+                break;
         }
-        if (CHECK_BIT(buffer[0], 2)) { // down
-            if (activeLine == 255) {
-                activeLine = 0;
-            } else {
-                activeLine = activeLine == 23 ? activeLine : activeLine + 1;
-            }
-            FPGATask.Write(0x82, activeLine);
-        }
+        return;
     }
 });
 
-int totalLength;
-int readLength;
+FPGATask fpgaTask(1, [](uint16_t controller_data) {
+    DBG_OUTPUT_PORT.printf("%x\n", controller_data);
+    if (!OSDOpen && CHECK_BIT(controller_data, CTRLR_TRIGGER_OSD)) {
+        currentMenu = &mainMenu;
+        setOSD(true, [](uint8_t Address, uint8_t Value) {
+            currentMenu->Display();
+        });
+    }
+    if (OSDOpen) {
+        currentMenu->HandleClick(controller_data);
+    }
+});
 
-void setOSD(uint8_t value) {
+void setOSD(bool value, WriteCallbackHandlerFunction handler) {
     OSDOpen = value;
-    FPGATask.Write(0x81, value);
+    fpgaTask.Write(I2C_OSD_ENABLE, value, handler);
 }
 
 void switchResolution(uint8_t value) {
-    FPGATask.Write(0x83, value);
+    fpgaTask.Write(I2C_OUTPUT_RESOLUTION, value);
 }
 
 void _writeFile(const char *filename, const char *towrite, unsigned int len) {
@@ -265,7 +294,7 @@ int writeProgress(uint8_t *buffer, size_t maxLen, int progress) {
 
 void handleFlash(AsyncWebServerRequest *request, const char *filename) {
     if (SPIFFS.exists(filename)) {
-        taskManager.StartTask(&FlashTask);
+        taskManager.StartTask(&flashTask);
         request->send(200);
     } else {
         request->send(404);
@@ -274,7 +303,7 @@ void handleFlash(AsyncWebServerRequest *request, const char *filename) {
 
 void handleESPFlash(AsyncWebServerRequest *request, const char *filename) {
     if (SPIFFS.exists(filename)) {
-        taskManager.StartTask(&FlashESPTask);
+        taskManager.StartTask(&flashESPTask);
         request->send(200);
     } else {
         request->send(404);
@@ -283,7 +312,7 @@ void handleESPFlash(AsyncWebServerRequest *request, const char *filename) {
 
 void handleESPIndexFlash(AsyncWebServerRequest *request) {
     if (SPIFFS.exists(ESP_INDEX_STAGING_FILE)) {
-        taskManager.StartTask(&FlashESPIndexTask);
+        taskManager.StartTask(&flashESPIndexTask);
         request->send(200);
     } else {
         request->send(404);
@@ -706,7 +735,7 @@ void setupHTTPServer() {
             return request->requestAuthentication();
         }
         char msg[64];
-        sprintf(msg, "%lu\n", ESP.getFlashChipSize());
+        sprintf(msg, "%lu\n", (long unsigned int) ESP.getFlashChipSize());
         request->send(200, "text/plain", msg);
     });
 
@@ -803,17 +832,7 @@ void setupHTTPServer() {
         AsyncWebParameter *row = request->getParam("row", true);
         AsyncWebParameter *text = request->getParam("text", true);
 
-        FPGATask.DoWriteToOSD(atoi(column->value().c_str()), atoi(row->value().c_str()), (uint8_t*) text->value().c_str());
-
-        // // controller data, int16
-        // /*
-        //     15: a, 14: b, 13: x, 12: y, 11: up, 10: down, 09: left, 08: right
-        //     07: start, 06: ltrigger, 05: rtrigger, 04: trigger_osd
-        // */
-        // uint8_t buffer[128];
-        // readFromFPGA(0x85, buffer, 2);
-        // DBG_OUTPUT_PORT.printf("0x85: %i %i \n", buffer[0], buffer[1]);
-
+        fpgaTask.DoWriteToOSD(atoi(column->value().c_str()), atoi(row->value().c_str()), (uint8_t*) text->value().c_str());
         request->send(200);
     });
 
@@ -821,7 +840,7 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        setOSD(true);
+        setOSD(true, NULL);
         request->send(200);
     });
 
@@ -829,7 +848,7 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        setOSD(false);
+        setOSD(false, NULL);
         request->send(200);
     });
 
@@ -895,24 +914,23 @@ void setupSPIFFS() {
     {
         FSInfo fs_info;
         SPIFFS.info(fs_info);
-	
 
-        DBG_OUTPUT_PORT.printf(">> totalBytes: (%lu)\n", fs_info.totalBytes);
-        DBG_OUTPUT_PORT.printf(">> usedBytes: (%lu)\n", fs_info.usedBytes);
-        DBG_OUTPUT_PORT.printf(">> blockSize: (%lu)\n", fs_info.blockSize);
-        DBG_OUTPUT_PORT.printf(">> pageSize: (%lu)\n", fs_info.pageSize);
-        DBG_OUTPUT_PORT.printf(">> maxOpenFiles: (%lu)\n", fs_info.maxOpenFiles);
-        DBG_OUTPUT_PORT.printf(">> maxPathLength: (%lu)\n", fs_info.maxPathLength);
-        DBG_OUTPUT_PORT.printf(">> maxSketchSpace 1: (%lu)\n", ESP.getFreeSketchSpace());
-        DBG_OUTPUT_PORT.printf(">> maxSketchSpace 2: (%lu)\n", (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
-        DBG_OUTPUT_PORT.printf(">> flashChipSize: (%lu)\n", ESP.getFlashChipSize());
-        DBG_OUTPUT_PORT.printf(">> freeHeapSize: (%lu)\n", ESP.getFreeHeap());
+        DBG_OUTPUT_PORT.printf(">> totalBytes: (%u)\n", fs_info.totalBytes);
+        DBG_OUTPUT_PORT.printf(">> usedBytes: (%u)\n", fs_info.usedBytes);
+        DBG_OUTPUT_PORT.printf(">> blockSize: (%u)\n", fs_info.blockSize);
+        DBG_OUTPUT_PORT.printf(">> pageSize: (%u)\n", fs_info.pageSize);
+        DBG_OUTPUT_PORT.printf(">> maxOpenFiles: (%u)\n", fs_info.maxOpenFiles);
+        DBG_OUTPUT_PORT.printf(">> maxPathLength: (%u)\n", fs_info.maxPathLength);
+        DBG_OUTPUT_PORT.printf(">> maxSketchSpace 1: (%u)\n", ESP.getFreeSketchSpace());
+        DBG_OUTPUT_PORT.printf(">> maxSketchSpace 2: (%u)\n", (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
+        DBG_OUTPUT_PORT.printf(">> flashChipSize: (%u)\n", ESP.getFlashChipSize());
+        DBG_OUTPUT_PORT.printf(">> freeHeapSize: (%u)\n", ESP.getFreeHeap());
 
         Dir dir = SPIFFS.openDir("/");
         while (dir.next()) {
             String fileName = dir.fileName();
             size_t fileSize = dir.fileSize();
-            DBG_OUTPUT_PORT.printf(">> %s (%lu)\n", fileName.c_str(), fileSize);
+            DBG_OUTPUT_PORT.printf(">> %s (%u)\n", fileName.c_str(), fileSize);
         }
         DBG_OUTPUT_PORT.printf("\n");
     }
@@ -933,7 +951,7 @@ void setup(void) {
     pinMode(NCONFIG, INPUT);
 
     setupI2C();
-    setOSD(false);
+    setOSD(false, NULL);
     setupSPIFFS();
     setupCredentials();
     setupWiFi();
@@ -946,8 +964,7 @@ void setup(void) {
 
     setupTaskManager();
     DBG_OUTPUT_PORT.println(">> Ready.");
-    uint8_t buffer[2];
-    taskManager.StartTask(&FPGATask);
+    taskManager.StartTask(&fpgaTask);
 }
 
 void loop(void){

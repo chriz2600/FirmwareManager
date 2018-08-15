@@ -1,3 +1,6 @@
+#ifndef FLASH_ESP_INDEX_TASK_H
+#define FLASH_ESP_INDEX_TASK_H
+
 #include <global.h>
 #include <Task.h>
 
@@ -81,3 +84,5 @@ class FlashESPIndexTask : public Task {
             DBG_OUTPUT_PORT.printf("2: flashing ESP index finished.\n");
         }
 };
+
+#endif
