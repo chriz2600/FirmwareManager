@@ -1054,18 +1054,18 @@ function resetall(step) {
     switch (step) {
         case 0:
             startTransaction(null, function() {
-                reset(function() {
+                reset_all(function() {
                     resetall(step + 1);
                 }, true);
             });
             break;
-        case 1:
-            startTransaction(null, function() {
-                restartESP(function() {
-                    resetall(step + 1);
-                });
-            });
-            break;
+        // case 1:
+        //     startTransaction(null, function() {
+        //         restartESP(function() {
+        //             resetall(step + 1);
+        //         });
+        //     });
+        //     break;
         default:
             document.location.reload(true);
             break;
@@ -1081,6 +1081,13 @@ function reset(successCallback, noNewline) {
 }
 
 var retryTimeout;
+
+function reset_all(successCallback, noNewline) {
+    $.ajax({ url: "/resetall", timeout: 1000 });
+    term.echo('Reset [[b;green;]OK]');
+    retryTimeout = 100;
+    pingESP(successCallback);
+}
 
 function restartESP(successCallback) {
     $.ajax({ url: "/restart", timeout: 1000 });

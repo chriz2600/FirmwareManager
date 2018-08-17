@@ -46,6 +46,7 @@ char confIPGateway[24] = DEFAULT_CONF_IP_GATEWAY;
 char confIPMask[24] = DEFAULT_CONF_IP_MASK;
 char confIPDNS[24] = DEFAULT_CONF_IP_DNS;
 char host[64] = DEFAULT_HOST;
+char forceVGA[2] = "0";
 const char* WiFiAPPSK = "geheim1234";
 IPAddress ipAddress( 192, 168, 4, 1 );
 bool inInitialSetupMode = false;
@@ -64,6 +65,7 @@ String header = String();
 
 bool OSDOpen = false;
 uint8_t OSDCurrentResolution = RESOLUTION_1080p;
+uint8_t OSDForceVGA          = VGA_ON;
 uint8_t menu_activeLine = 255;
 MD5Builder md5;
 TaskManager taskManager;
@@ -157,7 +159,6 @@ Menu mainMenu("MainMenu", (uint8_t*) OSD_MAIN_MENU, 11, 12, [](uint16_t controll
 }, NULL);
 
 FPGATask fpgaTask(1, [](uint16_t controller_data) {
-    DBG_OUTPUT_PORT.printf("--> %u %x \n", OSDOpen, controller_data);
     if (!OSDOpen && CHECK_BIT(controller_data, CTRLR_TRIGGER_OSD)) {
         openOSD();
         return;
@@ -659,7 +660,7 @@ void setupHTTPServer() {
         root["freeSketchSpace"] = ESP.getFreeSketchSpace();
         root["maxSketchSpace"] = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
         root["flashChipSize"] = ESP.getFlashChipSize();
-	root["freeHeapSize"] = ESP.getFreeHeap();
+        root["freeHeapSize"] = ESP.getFreeHeap();
 
         JsonArray &datas = root.createNestedArray("files");
 
@@ -786,6 +787,16 @@ void setupHTTPServer() {
         resetFPGAConfiguration();
         request->send(200, "text/plain", "OK\n");
         DBG_OUTPUT_PORT.printf("...delivered.\n");
+    });
+
+    server.on("/resetall", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        DBG_OUTPUT_PORT.printf("all reset requested...\n");
+        enableFPGA();
+        resetFPGAConfiguration();
+        ESP.restart();
     });
 
     server.on("/issetupmode", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -977,9 +988,31 @@ void setupSPIFFS() {
 void setupTaskManager() {
     DBG_OUTPUT_PORT.printf(">> Setting up task manager...\n");
     taskManager.Setup();
-    // prepare osd
-    closeOSD();
     taskManager.StartTask(&fpgaTask);
+}
+
+void setupInitialMode() {
+    DBG_OUTPUT_PORT.printf(">> Setting up initial output mode...\n");
+
+    _readFile("/etc/force_vga", forceVGA, 2, "1");
+    int value = atoi(forceVGA);
+    if (value == 0) {
+        pinMode(PIN6, INPUT);
+	DBG_OUTPUT_PORT.printf(">> Set pin6 to <unconnected>.\n");
+    } else if (value == 1) {
+        pinMode(PIN6, OUTPUT);
+	digitalWrite(PIN6, LOW);
+	DBG_OUTPUT_PORT.printf(">> Set pin6 to <LOW>, forcing VGA mode.\n");
+    }
+}
+
+void setupInitialConfig() {
+    // ensure osd is closed
+    closeOSD();
+    fpgaTask.ForceLoop();
+    // set output initial output resolution
+    fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDCurrentResolution);
+    fpgaTask.ForceLoop();
 }
 
 void setup(void) {
@@ -991,12 +1024,14 @@ void setup(void) {
     pinMode(NCE, INPUT);    
     pinMode(NCONFIG, INPUT);
 
-    setupI2C();
-    setupTaskManager();
     setupSPIFFS();
+    setupInitialMode();
+    setupTaskManager();
     setupCredentials();
     setupWiFi();
     setupHTTPServer();
+    setupI2C();
+    setupInitialConfig();
     
     if (strlen(otaPassword)) 
     {
@@ -1004,7 +1039,6 @@ void setup(void) {
     }
 
     DBG_OUTPUT_PORT.println(">> Ready.");
-    
 }
 
 void loop(void){

@@ -67,6 +67,10 @@ class FPGATask : public Task {
             read_callback = handler;
         }
 
+        void ForceLoop() {
+            OnUpdate(0L);
+        }
+
     private:
         FPGAEventHandlerFunction controller_handler;
         WriteCallbackHandlerFunction write_callback;
@@ -92,6 +96,7 @@ class FPGATask : public Task {
 
         long eTime;
         uint8_t repeatCount;
+        bool GotError = false;
 
         virtual bool OnStart() {
             return true;
@@ -172,8 +177,16 @@ class FPGATask : public Task {
                 memcpy(data_out, buffer2, 2);
             }
             if (brzo_i2c_end_transaction()) {
-                last_error = ERROR_END_I2C_TRANSACTION;
-                DBG_OUTPUT_PORT.printf("ERROR_END_I2C_TRANSACTION\n");
+                if (!GotError) {
+                    last_error = ERROR_END_I2C_TRANSACTION;
+                    DBG_OUTPUT_PORT.printf("ERROR_END_I2C_TRANSACTION\n");
+                }
+                GotError = true;
+            } else {
+                if (GotError) {
+                    DBG_OUTPUT_PORT.printf("finished i2c transaction\n");
+                }
+                GotError = false;
             }
         }
 
