@@ -291,6 +291,10 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             setResolution("1080p");
         });
+    } else if (command.match(/^\s*resetpll\s*$/)) {
+        startTransaction(null, function() {
+            resetpll();
+        });
     } else if (command.match(/^\s*details\s*$/)) {
         typed_message(term,
               getHelpDetailsFPGA()
@@ -773,6 +777,14 @@ function setResolution(type) {
         endTransaction("Switched resolution to: " + type);
     }).fail(function() {
         endTransaction('Error switching resolution.', true);
+    });
+}
+
+function resetpll() {
+    $.ajax("/reset/pll").done(function (data) {
+        endTransaction("Reset PLL done.");
+    }).fail(function() {
+        endTransaction('Error resetting PLL.', true);
     });
 }
 

@@ -5,7 +5,6 @@
 #define NCE 4
 #define NCONFIG 5
 #define DBG_OUTPUT_PORT Serial
-#define PIN6 A0
 
 #define FPGA_I2C_ADDR 0x3c
 #define FPGA_I2C_FREQ_KHZ 733
@@ -44,12 +43,14 @@
 #define RESOLUTION_VGA (0x03)
 
 #define VGA_OFF (0x00)
-#define VGA_ON (0x01)
+#define VGA_ON (0x80)
+#define RESET_PLL (0x40)
 
 #define I2C_OSD_ADDR_OFFSET (0x80)
 #define I2C_OSD_ENABLE (0x81)
 #define I2C_OSD_ACTIVE_LINE (0x82)
 #define I2C_OUTPUT_RESOLUTION (0x83)
+#define I2C_RESET (0x84)
 
 // // controller data, int16
 // /*

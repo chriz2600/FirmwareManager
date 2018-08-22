@@ -33,6 +33,8 @@
 #define DEFAULT_CONF_IP_MASK ""
 #define DEFAULT_CONF_IP_DNS ""
 #define DEFAULT_HOST "dc-firmware-manager"
+#define DEFAULT_FORCEVGA "128"
+#define DEFAULT_RESOLUTION "0"
 
 char ssid[64] = DEFAULT_SSID;
 char password[64] = DEFAULT_PASSWORD;
@@ -46,7 +48,8 @@ char confIPGateway[24] = DEFAULT_CONF_IP_GATEWAY;
 char confIPMask[24] = DEFAULT_CONF_IP_MASK;
 char confIPDNS[24] = DEFAULT_CONF_IP_DNS;
 char host[64] = DEFAULT_HOST;
-char forceVGA[2] = "0";
+char forceVGA[8] = "";
+char configuredResolution[8] = "";
 const char* WiFiAPPSK = "geheim1234";
 IPAddress ipAddress( 192, 168, 4, 1 );
 bool inInitialSetupMode = false;
@@ -65,7 +68,7 @@ String header = String();
 
 bool OSDOpen = false;
 uint8_t OSDCurrentResolution = RESOLUTION_1080p;
-uint8_t OSDForceVGA          = VGA_ON;
+uint8_t OSDForceVGA = VGA_ON;
 uint8_t menu_activeLine = 255;
 MD5Builder md5;
 TaskManager taskManager;
@@ -77,7 +80,6 @@ extern Menu mainMenu;
 Menu *currentMenu;
 // functions
 void setOSD(bool value, WriteCallbackHandlerFunction handler);
-void switchResolution(uint8_t value);
 
 void openOSD() {
     currentMenu = &mainMenu;
@@ -115,7 +117,8 @@ Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](u
         }
 
         OSDCurrentResolution = value;
-        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, value, [](uint8_t Address, uint8_t Value) {
+        DBG_OUTPUT_PORT.printf("setting output resolution: %u\n", (OSDForceVGA | OSDCurrentResolution));
+        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDForceVGA | OSDCurrentResolution, [](uint8_t Address, uint8_t Value) {
             DBG_OUTPUT_PORT.printf("switch resolution callback!\n");
         });
         return;
@@ -169,13 +172,14 @@ FPGATask fpgaTask(1, [](uint16_t controller_data) {
     }
 });
 
+void switchResolution(uint8_t newValue) {
+    OSDCurrentResolution = newValue;
+    fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDForceVGA | OSDCurrentResolution, NULL);
+}
+
 void setOSD(bool value, WriteCallbackHandlerFunction handler) {
     OSDOpen = value;
     fpgaTask.Write(I2C_OSD_ENABLE, value, handler);
-}
-
-void switchResolution(uint8_t value) {
-    fpgaTask.Write(I2C_OUTPUT_RESOLUTION, value);
 }
 
 void _writeFile(const char *filename, const char *towrite, unsigned int len) {
@@ -221,22 +225,22 @@ void setupCredentials(void) {
     _readFile("/etc/conf_ip_dns", confIPDNS, 24, DEFAULT_CONF_IP_DNS);
     _readFile("/etc/hostname", host, 64, DEFAULT_HOST);
 
-    if (DEBUG) {
-        DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
-        DBG_OUTPUT_PORT.printf("| /etc/ssid             -> ssid:            [%s]\n", ssid);
-        DBG_OUTPUT_PORT.printf("| /etc/password         -> password:        [%s]\n", password);
-        DBG_OUTPUT_PORT.printf("| /etc/ota_pass         -> otaPassword:     [%s]\n", otaPassword);
-        DBG_OUTPUT_PORT.printf("| /etc/firmware_server  -> firmwareServer:  [%s]\n", firmwareServer);
-        DBG_OUTPUT_PORT.printf("| /etc/firmware_version -> firmwareVersion: [%s]\n", firmwareVersion);
-        DBG_OUTPUT_PORT.printf("| /etc/http_auth_user   -> httpAuthUser:    [%s]\n", httpAuthUser);
-        DBG_OUTPUT_PORT.printf("| /etc/http_auth_pass   -> httpAuthPass:    [%s]\n", httpAuthPass);
-        DBG_OUTPUT_PORT.printf("| /etc/conf_ip_addr     -> confIPAddr:      [%s]\n", confIPAddr);
-        DBG_OUTPUT_PORT.printf("| /etc/conf_ip_gateway  -> confIPGateway:   [%s]\n", confIPGateway);
-        DBG_OUTPUT_PORT.printf("| /etc/conf_ip_mask     -> confIPMask:      [%s]\n", confIPMask);
-        DBG_OUTPUT_PORT.printf("| /etc/conf_ip_dns      -> confIPDNS:       [%s]\n", confIPDNS);
-        DBG_OUTPUT_PORT.printf("| /etc/hostname         -> host:            [%s]\n", host);
-        DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
-    }
+    // if (DEBUG) {
+    //     DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
+    //     DBG_OUTPUT_PORT.printf("| /etc/ssid             -> ssid:            [%s]\n", ssid);
+    //     DBG_OUTPUT_PORT.printf("| /etc/password         -> password:        [%s]\n", password);
+    //     DBG_OUTPUT_PORT.printf("| /etc/ota_pass         -> otaPassword:     [%s]\n", otaPassword);
+    //     DBG_OUTPUT_PORT.printf("| /etc/firmware_server  -> firmwareServer:  [%s]\n", firmwareServer);
+    //     DBG_OUTPUT_PORT.printf("| /etc/firmware_version -> firmwareVersion: [%s]\n", firmwareVersion);
+    //     DBG_OUTPUT_PORT.printf("| /etc/http_auth_user   -> httpAuthUser:    [%s]\n", httpAuthUser);
+    //     DBG_OUTPUT_PORT.printf("| /etc/http_auth_pass   -> httpAuthPass:    [%s]\n", httpAuthPass);
+    //     DBG_OUTPUT_PORT.printf("| /etc/conf_ip_addr     -> confIPAddr:      [%s]\n", confIPAddr);
+    //     DBG_OUTPUT_PORT.printf("| /etc/conf_ip_gateway  -> confIPGateway:   [%s]\n", confIPGateway);
+    //     DBG_OUTPUT_PORT.printf("| /etc/conf_ip_mask     -> confIPMask:      [%s]\n", confIPMask);
+    //     DBG_OUTPUT_PORT.printf("| /etc/conf_ip_dns      -> confIPDNS:       [%s]\n", confIPDNS);
+    //     DBG_OUTPUT_PORT.printf("| /etc/hostname         -> host:            [%s]\n", host);
+    //     DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
+    // }
 }
 
 void setupAPMode(void) {
@@ -933,6 +937,15 @@ void setupHTTPServer() {
         request->send(200);
     });
 
+    server.on("/reset/pll", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        fpgaTask.Write(I2C_RESET, RESET_PLL, NULL);
+        request->send(200);
+    });
+
+
     AsyncStaticWebHandler* handler = &server
         .serveStatic("/", SPIFFS, "/")
         .setDefaultFile("index.html");
@@ -960,29 +973,29 @@ void setupSPIFFS() {
             DBG_OUTPUT_PORT.printf("error.\n");
         }
     }
-    {
-        FSInfo fs_info;
-        SPIFFS.info(fs_info);
+    // {
+    //     FSInfo fs_info;
+    //     SPIFFS.info(fs_info);
 
-        DBG_OUTPUT_PORT.printf(">> totalBytes: (%u)\n", fs_info.totalBytes);
-        DBG_OUTPUT_PORT.printf(">> usedBytes: (%u)\n", fs_info.usedBytes);
-        DBG_OUTPUT_PORT.printf(">> blockSize: (%u)\n", fs_info.blockSize);
-        DBG_OUTPUT_PORT.printf(">> pageSize: (%u)\n", fs_info.pageSize);
-        DBG_OUTPUT_PORT.printf(">> maxOpenFiles: (%u)\n", fs_info.maxOpenFiles);
-        DBG_OUTPUT_PORT.printf(">> maxPathLength: (%u)\n", fs_info.maxPathLength);
-        DBG_OUTPUT_PORT.printf(">> maxSketchSpace 1: (%u)\n", ESP.getFreeSketchSpace());
-        DBG_OUTPUT_PORT.printf(">> maxSketchSpace 2: (%u)\n", (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
-        DBG_OUTPUT_PORT.printf(">> flashChipSize: (%u)\n", ESP.getFlashChipSize());
-        DBG_OUTPUT_PORT.printf(">> freeHeapSize: (%u)\n", ESP.getFreeHeap());
+    //     DBG_OUTPUT_PORT.printf(">> totalBytes: (%u)\n", fs_info.totalBytes);
+    //     DBG_OUTPUT_PORT.printf(">> usedBytes: (%u)\n", fs_info.usedBytes);
+    //     DBG_OUTPUT_PORT.printf(">> blockSize: (%u)\n", fs_info.blockSize);
+    //     DBG_OUTPUT_PORT.printf(">> pageSize: (%u)\n", fs_info.pageSize);
+    //     DBG_OUTPUT_PORT.printf(">> maxOpenFiles: (%u)\n", fs_info.maxOpenFiles);
+    //     DBG_OUTPUT_PORT.printf(">> maxPathLength: (%u)\n", fs_info.maxPathLength);
+    //     DBG_OUTPUT_PORT.printf(">> maxSketchSpace 1: (%u)\n", ESP.getFreeSketchSpace());
+    //     DBG_OUTPUT_PORT.printf(">> maxSketchSpace 2: (%u)\n", (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
+    //     DBG_OUTPUT_PORT.printf(">> flashChipSize: (%u)\n", ESP.getFlashChipSize());
+    //     DBG_OUTPUT_PORT.printf(">> freeHeapSize: (%u)\n", ESP.getFreeHeap());
 
-        Dir dir = SPIFFS.openDir("/");
-        while (dir.next()) {
-            String fileName = dir.fileName();
-            size_t fileSize = dir.fileSize();
-            DBG_OUTPUT_PORT.printf(">> %s (%u)\n", fileName.c_str(), fileSize);
-        }
-        DBG_OUTPUT_PORT.printf("\n");
-    }
+    //     Dir dir = SPIFFS.openDir("/");
+    //     while (dir.next()) {
+    //         String fileName = dir.fileName();
+    //         size_t fileSize = dir.fileSize();
+    //         DBG_OUTPUT_PORT.printf(">> %s (%u)\n", fileName.c_str(), fileSize);
+    //     }
+    //     DBG_OUTPUT_PORT.printf("\n");
+    // }
 }
 
 void setupTaskManager() {
@@ -991,28 +1004,29 @@ void setupTaskManager() {
     taskManager.StartTask(&fpgaTask);
 }
 
-void setupInitialMode() {
-    DBG_OUTPUT_PORT.printf(">> Setting up initial output mode...\n");
+void setupOutputResolution() {
+    int retryCount = 500;
+    int retries = 0;
 
-    _readFile("/etc/force_vga", forceVGA, 2, "1");
-    int value = atoi(forceVGA);
-    if (value == 0) {
-        pinMode(PIN6, INPUT);
-	DBG_OUTPUT_PORT.printf(">> Set pin6 to <unconnected>.\n");
-    } else if (value == 1) {
-        pinMode(PIN6, OUTPUT);
-	digitalWrite(PIN6, LOW);
-	DBG_OUTPUT_PORT.printf(">> Set pin6 to <LOW>, forcing VGA mode.\n");
+    _readFile("/etc/force_vga", forceVGA, 8, DEFAULT_FORCEVGA);
+    OSDForceVGA = atoi(forceVGA);
+
+    _readFile("/etc/resolution", configuredResolution, 8, DEFAULT_RESOLUTION);
+    OSDCurrentResolution = atoi(configuredResolution);
+
+    DBG_OUTPUT_PORT.printf(">> Setting up output resolution: %x\n", OSDForceVGA | OSDCurrentResolution);
+    while (retryCount >= 0) {
+        retries++;
+        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDForceVGA | OSDCurrentResolution, NULL);
+        fpgaTask.ForceLoop();
+        retryCount--;
+        if (last_error == 0) {
+            break;
+        }
+        delayMicroseconds(5000);
+        yield();
     }
-}
-
-void setupInitialConfig() {
-    // ensure osd is closed
-    closeOSD();
-    fpgaTask.ForceLoop();
-    // set output initial output resolution
-    fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDCurrentResolution);
-    fpgaTask.ForceLoop();
+    DBG_OUTPUT_PORT.printf("   retries needed: %i\n", retries);
 }
 
 void setup(void) {
@@ -1024,14 +1038,13 @@ void setup(void) {
     pinMode(NCE, INPUT);    
     pinMode(NCONFIG, INPUT);
 
+    setupI2C();
     setupSPIFFS();
-    setupInitialMode();
+    setupOutputResolution();
     setupTaskManager();
     setupCredentials();
     setupWiFi();
     setupHTTPServer();
-    setupI2C();
-    setupInitialConfig();
     
     if (strlen(otaPassword)) 
     {

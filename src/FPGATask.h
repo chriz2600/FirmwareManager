@@ -105,7 +105,7 @@ class FPGATask : public Task {
         virtual void OnUpdate(uint32_t deltaTime) {
             brzo_i2c_start_transaction(FPGA_I2C_ADDR, FPGA_I2C_FREQ_KHZ);
             if (updateOSDContent) {
-                DBG_OUTPUT_PORT.printf("updateOSDContent: stringLength: %u, left: %u\n", stringLength, left);
+                //DBG_OUTPUT_PORT.printf("updateOSDContent: stringLength: %u, left: %u\n", stringLength, left);
                 if (left > 0) {
                     upperAddress = localAddress / MAX_ADDR_SPACE;
                     lowerAddress = localAddress % MAX_ADDR_SPACE;
@@ -127,7 +127,7 @@ class FPGATask : public Task {
                     }
                 }
             } else if (Update) {
-                DBG_OUTPUT_PORT.printf("Update: %x %x\n", Address, Value);
+                //DBG_OUTPUT_PORT.printf("Update: %x %x\n", Address, Value);
                 uint8_t buffer[2];
                 buffer[0] = Address;
                 buffer[1] = Value;
@@ -138,7 +138,7 @@ class FPGATask : public Task {
                 }
             } else if (DoRead) {
                 // Value is read len here
-                DBG_OUTPUT_PORT.printf("Read: %x %x\n", Address, Value);
+                //DBG_OUTPUT_PORT.printf("Read: %x %x\n", Address, Value);
                 uint8_t buffer[1];
                 uint8_t buffer2[Value];
                 buffer[0] = Address;
@@ -179,12 +179,13 @@ class FPGATask : public Task {
             if (brzo_i2c_end_transaction()) {
                 if (!GotError) {
                     last_error = ERROR_END_I2C_TRANSACTION;
-                    DBG_OUTPUT_PORT.printf("ERROR_END_I2C_TRANSACTION\n");
+                    DBG_OUTPUT_PORT.printf("--> ERROR_END_I2C_TRANSACTION\n");
                 }
                 GotError = true;
             } else {
                 if (GotError) {
-                    DBG_OUTPUT_PORT.printf("finished i2c transaction\n");
+                    last_error = 0;
+                    DBG_OUTPUT_PORT.printf("<-- FINISHED_I2C_TRANSACTION\n");
                 }
                 GotError = false;
             }
