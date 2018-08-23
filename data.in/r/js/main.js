@@ -295,6 +295,10 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             resetpll();
         });
+    } else if (command.match(/^\s*hdmi_power_down\s*$/)) {
+        startTransaction(null, function() {
+            hdmiPowerDown();
+        });
     } else if (command.match(/^\s*details\s*$/)) {
         typed_message(term,
               getHelpDetailsFPGA()
@@ -788,6 +792,14 @@ function resetpll() {
     });
 }
 
+function hdmiPowerDown() {
+    $.ajax("/power/down/hdmi").done(function (data) {
+        endTransaction("Powering donw HDMI done.");
+    }).fail(function() {
+        endTransaction('Error powering down HDMI.', true);
+    });
+}
+
 function getConfig(show, cb) {
     $.ajax("/config").done(function (data) {
         currentConfigData = data;
@@ -1085,7 +1097,7 @@ function resetall(step) {
 }
 
 function reset(successCallback, noNewline) {
-    $.ajax("/reset").done(function (data) {
+    $.ajax("/reset/fpga").done(function (data) {
         endTransaction('FPGA reset [[b;green;]OK]' + (noNewline ? '' : '\n'), false, successCallback);
     }).fail(function() {
         endTransaction("Error resetting fpga!", true);
@@ -1095,7 +1107,7 @@ function reset(successCallback, noNewline) {
 var retryTimeout;
 
 function reset_all(successCallback, noNewline) {
-    $.ajax({ url: "/resetall", timeout: 1000 });
+    $.ajax({ url: "/reset/all", timeout: 1000 });
     term.echo('Reset [[b;green;]OK]');
     retryTimeout = 100;
     pingESP(successCallback);

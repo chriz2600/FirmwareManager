@@ -782,7 +782,7 @@ void setupHTTPServer() {
         request->send(200, "text/plain", msg);
     });
 
-    server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/reset/fpga", HTTP_GET, [](AsyncWebServerRequest *request) {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
@@ -793,7 +793,7 @@ void setupHTTPServer() {
         DBG_OUTPUT_PORT.printf("...delivered.\n");
     });
 
-    server.on("/resetall", HTTP_GET, [](AsyncWebServerRequest *request) {
+    server.on("/reset/all", HTTP_GET, [](AsyncWebServerRequest *request) {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
@@ -862,7 +862,7 @@ void setupHTTPServer() {
         request->send(response);
     });
 
-    server.on("/restart", HTTP_ANY, [](AsyncWebServerRequest *request) {
+    server.on("/reset/esp", HTTP_ANY, [](AsyncWebServerRequest *request) {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
@@ -941,10 +941,17 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        fpgaTask.Write(I2C_RESET, RESET_PLL, NULL);
+        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDForceVGA | OSDCurrentResolution | PLL_RESET_ON, NULL);
         request->send(200);
     });
 
+    server.on("/power/down/hdmi", HTTP_GET, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+        fpgaTask.Write(I2C_POWER, HDMI_POWER_DOWN, NULL);
+        request->send(200);
+    });
 
     AsyncStaticWebHandler* handler = &server
         .serveStatic("/", SPIFFS, "/")
