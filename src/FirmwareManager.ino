@@ -800,6 +800,7 @@ void setupHTTPServer() {
         DBG_OUTPUT_PORT.printf("all reset requested...\n");
         enableFPGA();
         resetFPGAConfiguration();
+        ESP.eraseConfig();
         ESP.restart();
     });
 

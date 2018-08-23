@@ -1114,7 +1114,7 @@ function reset_all(successCallback, noNewline) {
 }
 
 function restartESP(successCallback) {
-    $.ajax({ url: "/restart", timeout: 1000 });
+    $.ajax({ url: "/reset/esp", timeout: 1000 });
     term.echo('ESP reset [[b;green;]OK]');
     retryTimeout = 100;
     pingESP(successCallback);
