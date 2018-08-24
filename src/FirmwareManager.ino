@@ -33,8 +33,8 @@
 #define DEFAULT_CONF_IP_MASK ""
 #define DEFAULT_CONF_IP_DNS ""
 #define DEFAULT_HOST "dc-firmware-manager"
-#define DEFAULT_FORCEVGA VIDEO_MODE_STR_FORCE_VGA
-#define DEFAULT_RESOLUTION RESOLUTION_STR_1080p
+#define DEFAULT_VIDEO_MODE VIDEO_MODE_STR_FORCE_VGA
+#define DEFAULT_VIDEO_RESOLUTION RESOLUTION_STR_1080p
 
 char ssid[64] = DEFAULT_SSID;
 char password[64] = DEFAULT_PASSWORD;
@@ -333,23 +333,6 @@ void setupCredentials(void) {
     _readFile("/etc/conf_ip_mask", confIPMask, 24, DEFAULT_CONF_IP_MASK);
     _readFile("/etc/conf_ip_dns", confIPDNS, 24, DEFAULT_CONF_IP_DNS);
     _readFile("/etc/hostname", host, 64, DEFAULT_HOST);
-
-    // if (DEBUG) {
-    //     DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
-    //     DBG_OUTPUT_PORT.printf("| /etc/ssid             -> ssid:            [%s]\n", ssid);
-    //     DBG_OUTPUT_PORT.printf("| /etc/password         -> password:        [%s]\n", password);
-    //     DBG_OUTPUT_PORT.printf("| /etc/ota_pass         -> otaPassword:     [%s]\n", otaPassword);
-    //     DBG_OUTPUT_PORT.printf("| /etc/firmware_server  -> firmwareServer:  [%s]\n", firmwareServer);
-    //     DBG_OUTPUT_PORT.printf("| /etc/firmware_version -> firmwareVersion: [%s]\n", firmwareVersion);
-    //     DBG_OUTPUT_PORT.printf("| /etc/http_auth_user   -> httpAuthUser:    [%s]\n", httpAuthUser);
-    //     DBG_OUTPUT_PORT.printf("| /etc/http_auth_pass   -> httpAuthPass:    [%s]\n", httpAuthPass);
-    //     DBG_OUTPUT_PORT.printf("| /etc/conf_ip_addr     -> confIPAddr:      [%s]\n", confIPAddr);
-    //     DBG_OUTPUT_PORT.printf("| /etc/conf_ip_gateway  -> confIPGateway:   [%s]\n", confIPGateway);
-    //     DBG_OUTPUT_PORT.printf("| /etc/conf_ip_mask     -> confIPMask:      [%s]\n", confIPMask);
-    //     DBG_OUTPUT_PORT.printf("| /etc/conf_ip_dns      -> confIPDNS:       [%s]\n", confIPDNS);
-    //     DBG_OUTPUT_PORT.printf("| /etc/hostname         -> host:            [%s]\n", host);
-    //     DBG_OUTPUT_PORT.printf("+---------------------------------------------------------------------\n");
-    // }
 }
 
 void setupAPMode(void) {
@@ -751,9 +734,12 @@ void setupWiFi() {
 }
 
 void writeSetupParameter(AsyncWebServerRequest *request, const char* param, char* target, unsigned int maxlen, const char* resetValue) {
+    String _tmp = "/etc/" + String(param);
+    writeSetupParameter(request, param, target, _tmp.c_str(), maxlen, resetValue);
+}
+
+void writeSetupParameter(AsyncWebServerRequest *request, const char* param, char* target, const char* filename, unsigned int maxlen, const char* resetValue) {
     if(request->hasParam(param, true)) {
-        String _tmp = "/etc/" + String(param);
-        const char* filename = _tmp.c_str();
         AsyncWebParameter *p = request->getParam(param, true);
         if (p->value() == "") {
             DBG_OUTPUT_PORT.printf("SPIFFS.remove: %s\n", filename);
@@ -984,6 +970,8 @@ void setupHTTPServer() {
         writeSetupParameter(request, "conf_ip_mask", confIPMask, 24, DEFAULT_CONF_IP_MASK);
         writeSetupParameter(request, "conf_ip_dns", confIPDNS, 24, DEFAULT_CONF_IP_DNS);
         writeSetupParameter(request, "hostname", host, 64, DEFAULT_HOST);
+        writeSetupParameter(request, "video_resolution", configuredResolution, "/etc/video/resolution", 16, DEFAULT_VIDEO_RESOLUTION);
+        writeSetupParameter(request, "video_mode", videoMode, "/etc/video/mode", 16, DEFAULT_VIDEO_MODE);
 
         request->send(200, "text/plain", "OK\n");
     });
@@ -1011,6 +999,8 @@ void setupHTTPServer() {
         root["conf_ip_dns"] = confIPDNS;
         root["hostname"] = host;
         root["fw_version"] = FW_VERSION;
+        root["video_resolution"] = configuredResolution;
+        root["video_mode"] = videoMode;
 
         root.printTo(*response);
         request->send(response);
@@ -1166,7 +1156,7 @@ void setupTaskManager() {
 }
 
 void readVideoMode() {
-    _readFile("/etc/video/mode", videoMode, 16, DEFAULT_FORCEVGA);
+    _readFile("/etc/video/mode", videoMode, 16, DEFAULT_VIDEO_MODE);
     String vidMode = String(videoMode);
 
     if (vidMode == VIDEO_MODE_STR_FORCE_VGA) {
@@ -1199,7 +1189,7 @@ void writeVideoMode2(String vidMode) {
 }
 
 void readCurrentResolution() {
-    _readFile("/etc/video/resolution", configuredResolution, 16, DEFAULT_RESOLUTION);
+    _readFile("/etc/video/resolution", configuredResolution, 16, DEFAULT_VIDEO_RESOLUTION);
     CurrentResolution = cfgRes2Int(configuredResolution);
 }
 

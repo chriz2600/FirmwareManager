@@ -650,7 +650,9 @@ var setupDataMapping = {
     conf_ip_gateway:  [ "Gateway          ", "empty" ],
     conf_ip_mask:     [ "Netmask          ", "empty" ],
     conf_ip_dns:      [ "DNS              ", "empty" ],
-    hostname:         [ "Hostname         ", "dc-firmware-manager" ]
+    hostname:         [ "Hostname         ", "dc-firmware-manager" ],
+    video_resolution: [ "Video output     ", "1080p" ],
+    video_mode:       [ "Video mode       ", "CableDetect" ]
 };
 var dataExcludeMap = {
     "flash_chip_size":"", 
