@@ -36,6 +36,8 @@
 #define DEFAULT_VIDEO_MODE VIDEO_MODE_STR_FORCE_VGA
 #define DEFAULT_VIDEO_RESOLUTION RESOLUTION_STR_1080p
 
+typedef std::function<void(String data)> ContentCallback;
+
 char ssid[64] = DEFAULT_SSID;
 char password[64] = DEFAULT_PASSWORD;
 char otaPassword[64] = DEFAULT_OTA_PASSWORD; 
@@ -65,6 +67,7 @@ static AsyncClient *aClient = NULL;
 File flashFile;
 bool headerFound = false;
 String header = String();
+String responseData = String();
 
 bool OSDOpen = false;
 uint8_t CurrentResolution = RESOLUTION_1080p;
@@ -492,43 +495,51 @@ void handleESPIndexDownload(AsyncWebServerRequest *request) {
     _handleDownload(request, ESP_INDEX_STAGING_FILE, httpGet);
 }
 
-// void getMD5SumsFromServer(String httpGet) {
-//     aClient = new AsyncClient();
-//     aClient->onError([](void *arg, AsyncClient *client, int error) {
-//         aClient = NULL;
-//         delete client;
-//     }, NULL);
+void getMD5SumFromServer(String host, String url, ContentCallback contentCallback) {
+    String httpGet = "GET " + url + " HTTP/1.0\r\nHost: " + host + "\r\n\r\n";
+    headerFound = false;
+    last_error = NO_ERROR;
+    responseData = "";
+    aClient = new AsyncClient();
+    aClient->onError([](void *arg, AsyncClient *client, int error) {
+        aClient = NULL;
+        delete client;
+    }, NULL);
 
-//     aClient->onConnect([ httpGet ](void *arg, AsyncClient *client) {
-//         aClient->onError(NULL, NULL);
+    aClient->onConnect([ httpGet, contentCallback ](void *arg, AsyncClient *client) {
+        aClient->onError(NULL, NULL);
 
-//         client->onDisconnect([](void *arg, AsyncClient *c) {
-//             aClient = NULL;
-//             delete c;
-//         }, NULL);
+        client->onDisconnect([ contentCallback ](void *arg, AsyncClient *c) {
+            contentCallback(responseData);
+            aClient = NULL;
+            delete c;
+        }, NULL);
     
-//         client->onData([](void *arg, AsyncClient *c, void *data, size_t len) {
-//             uint8_t* d = (uint8_t*) data;
-
-//             String sData = String((char*) data);
-//             int idx = sData.indexOf("\r\n\r\n");
-//             if (idx != -1) {
-//                 d = (uint8_t*) sData.substring(idx + 4).c_str();
-//                 len = (len - (idx + 4));
-//             }
-//         }, NULL);
+        client->onData([](void *arg, AsyncClient *c, void *data, size_t len) {
+            String sData = String((char*) data);
+            if (!headerFound) {
+                int idx = sData.indexOf("\r\n\r\n");
+                if (idx == -1) {
+                    return;
+                }
+                responseData += sData.substring(idx + 4);
+                headerFound = true;
+            } else {
+                responseData += sData;
+            }
+        }, NULL);
     
-//         //send the request
-//         DBG_OUTPUT_PORT.println("Requesting firmware...");
-//         client->write(httpGet.c_str());
-//     });
+        //send the request
+        DBG_OUTPUT_PORT.printf("Requesting: %s\n", httpGet.c_str());
+        client->write(httpGet.c_str());
+    });
 
-//     if (!aClient->connect(firmwareServer, 80)) {
-//         AsyncClient *client = aClient;
-//         aClient = NULL;
-//         delete client;
-//     }
-// }
+    if (!aClient->connect(firmwareServer, 80)) {
+        AsyncClient *client = aClient;
+        aClient = NULL;
+        delete client;
+    }
+}
 
 void _handleDownload(AsyncWebServerRequest *request, const char *filename, String httpGet) {
     headerFound = false;
@@ -598,7 +609,7 @@ void _handleDownload(AsyncWebServerRequest *request, const char *filename, Strin
             }, NULL);
         
             //send the request
-            DBG_OUTPUT_PORT.println("Requesting firmware...");
+            DBG_OUTPUT_PORT.printf("Requesting: %s\n", httpGet.c_str());
             client->write(httpGet.c_str());
         }, NULL);
 
@@ -1267,6 +1278,12 @@ void setup(void) {
     }
 
     setOSD(false, NULL); fpgaTask.ForceLoop();
+
+    getMD5SumFromServer("dc.i74.de", "/fw/develop/DCxPlus-default.dc.md5", [](String data) {
+        data = (data.length() >= 8 ? data.substring(0, 8) : data);
+        DBG_OUTPUT_PORT.printf("Callback from getMD5SumFromServer: [%s]\n", data.c_str());
+    });
+
     DBG_OUTPUT_PORT.println(">> Ready.");
 }
 
