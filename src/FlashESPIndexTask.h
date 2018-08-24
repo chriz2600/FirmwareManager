@@ -36,7 +36,7 @@ class FlashESPIndexTask : public Task {
             totalLength = -1;
             readLength = 0;
             prevPercentComplete = -1;
-            last_error = 0;
+            last_error = NO_ERROR;
             
             md5.begin();
             sourceFile = SPIFFS.open(ESP_INDEX_STAGING_FILE, "r");

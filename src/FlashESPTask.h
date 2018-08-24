@@ -36,7 +36,7 @@ class FlashESPTask : public Task {
             totalLength = -1;
             readLength = 0;
             prevPercentComplete = -1;
-            last_error = 0;
+            last_error = NO_ERROR;
 
             md5.begin();
             flashFile = SPIFFS.open(ESP_FIRMWARE_FILE, "r");

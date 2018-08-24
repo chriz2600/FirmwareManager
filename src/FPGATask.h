@@ -184,7 +184,7 @@ class FPGATask : public Task {
                 GotError = true;
             } else {
                 if (GotError) {
-                    last_error = 0;
+                    last_error = NO_ERROR;
                     DBG_OUTPUT_PORT.printf("<-- FINISHED_I2C_TRANSACTION\n");
                 }
                 GotError = false;

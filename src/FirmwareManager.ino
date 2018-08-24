@@ -57,7 +57,7 @@ bool fpgaDisabled = false;
 String fname;
 AsyncWebServer server(80);
 SPIFlash flash(CS);
-int last_error = 0; 
+int last_error = NO_ERROR; 
 int totalLength;
 int readLength;
 
@@ -92,6 +92,8 @@ void closeOSD() {
     setOSD(false, NULL);
 }
 
+void waitForI2CRecover();
+
 Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](uint16_t controller_data) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         currentMenu = &mainMenu;
@@ -116,10 +118,16 @@ Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](u
                 break;
         }
 
+        bool valueChanged = (value != OSDCurrentResolution);
         OSDCurrentResolution = value;
         DBG_OUTPUT_PORT.printf("setting output resolution: %u\n", (OSDForceVGA | OSDCurrentResolution));
-        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDForceVGA | OSDCurrentResolution, [](uint8_t Address, uint8_t Value) {
-            DBG_OUTPUT_PORT.printf("switch resolution callback!\n");
+        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDForceVGA | OSDCurrentResolution, [valueChanged](uint8_t Address, uint8_t Value) {
+            DBG_OUTPUT_PORT.printf("switch resolution callback: %u\n", Value);
+            if (valueChanged) {
+                waitForI2CRecover();
+            }
+            DBG_OUTPUT_PORT.printf("Turn FOLLOWUP save menu on!\n");
+            // TODO: Go to save output settings menu!
         });
         return;
     }
@@ -171,6 +179,24 @@ FPGATask fpgaTask(1, [](uint16_t controller_data) {
         currentMenu->HandleClick(controller_data);
     }
 });
+
+void waitForI2CRecover() {
+    int retryCount = 2600;
+    int prev_last_error = NO_ERROR;
+    DBG_OUTPUT_PORT.printf("... PRE: prev_last_error/last_error %i (%u/%u)\n", retryCount, prev_last_error, last_error);
+    while (retryCount >= 0) {
+        fpgaTask.Read(I2C_PING, 1, NULL); 
+        fpgaTask.ForceLoop();
+        if (prev_last_error != NO_ERROR && last_error == NO_ERROR) {
+            break;
+        }
+        prev_last_error = last_error;
+        retryCount--;
+        delayMicroseconds(200);
+        yield();
+    }
+    DBG_OUTPUT_PORT.printf("... POST: prev_last_error/last_error %i (%u/%u)\n", retryCount, prev_last_error, last_error);
+}
 
 void switchResolution(uint8_t newValue) {
     OSDCurrentResolution = newValue;
@@ -335,6 +361,14 @@ int writeProgress(uint8_t *buffer, size_t maxLen, int progress) {
     return alen;
 }
 
+void resetall() {
+    DBG_OUTPUT_PORT.printf("all reset requested...\n");
+    enableFPGA();
+    resetFPGAConfiguration();
+    ESP.eraseConfig();
+    ESP.restart();
+}
+
 void handleFlash(AsyncWebServerRequest *request, const char *filename) {
     if (SPIFFS.exists(filename)) {
         taskManager.StartTask(&flashTask);
@@ -397,7 +431,7 @@ void _handleDownload(AsyncWebServerRequest *request, const char *filename, Strin
     header = String();
     totalLength = -1;
     readLength = -1;
-    last_error = 0;
+    last_error = NO_ERROR;
     md5.begin();
     flashFile = SPIFFS.open(filename, "w");
 
@@ -765,7 +799,7 @@ void setupHTTPServer() {
             request->send(200, "text/plain", msg);
             DBG_OUTPUT_PORT.printf("...delivered: %s (%i).\n", msg, last_error);
             // clear last_error
-            last_error = 0;
+            last_error = NO_ERROR;
         } else {
             sprintf(msg, "%i\n", totalLength <= 0 ? 0 : (int)(readLength * 100 / totalLength));
             request->send(200, "text/plain", msg);
@@ -797,11 +831,7 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        DBG_OUTPUT_PORT.printf("all reset requested...\n");
-        enableFPGA();
-        resetFPGAConfiguration();
-        ESP.eraseConfig();
-        ESP.restart();
+        resetall();
     });
 
     server.on("/issetupmode", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -1028,13 +1058,13 @@ void setupOutputResolution() {
         fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDForceVGA | OSDCurrentResolution, NULL);
         fpgaTask.ForceLoop();
         retryCount--;
-        if (last_error == 0) {
+        if (last_error == NO_ERROR) {
             break;
         }
         delayMicroseconds(5000);
         yield();
     }
-    DBG_OUTPUT_PORT.printf("   retries needed: %i\n", retries);
+    DBG_OUTPUT_PORT.printf("   retry loops needed: %i\n", retries);
 }
 
 void setup(void) {
@@ -1059,6 +1089,7 @@ void setup(void) {
         setupArduinoOTA();
     }
 
+    setOSD(false, NULL); fpgaTask.ForceLoop();
     DBG_OUTPUT_PORT.println(">> Ready.");
 }
 

@@ -23,6 +23,8 @@
 #define PAGES 8192 // 8192 pages x 256 bytes = 2MB = 16MBit
 #define DEBUG true
 
+#define NO_ERROR 0
+
 #define ERROR_WRONG_MAGIC 16
 #define ERROR_WRONG_VERSION 17
 #define ERROR_FILE 18
@@ -56,6 +58,7 @@
 #define I2C_OSD_ACTIVE_LINE (0x82)
 #define I2C_OUTPUT_RESOLUTION (0x83)
 #define I2C_POWER (0x84)
+#define I2C_PING (0xFF)
 
 // // controller data, int16
 // /*
