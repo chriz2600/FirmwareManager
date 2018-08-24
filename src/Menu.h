@@ -10,9 +10,9 @@ char OSD_MAIN_MENU[521] = (
     "MainMenu                                "
     "                                        "
     "- Output Resolution                     "
-    "- Debug                                 "
-    "                                        "
-    "                                        "
+    "- Video Mode Settings                   "
+    "- Firmware Upgrade                      "
+    "- Info                                  "
     "                                        "
     "                                        "
     "                                        "
@@ -30,12 +30,76 @@ char OSD_OUTPUT_RES_MENU[521] = (
     "- 960p                                  "
     "- 1080p                                 "
     "                                        "
-    "                                        "
+    "  '>' marks the default setting         "
     "                                        "
     "                                        "
     "                                        "
     "                                        "
     "          A: Apply   B: Back            "
+);
+
+char OSD_OUTPUT_RES_SAVE_MENU[521] = (
+    "Output Resolution                       "
+    "                                        "
+    "     Save this setting as default?      "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "          A: Ok    B: Cancel            "
+);
+
+char OSD_VIDEO_MODE_MENU[521] = (
+    "Video Mode Settings                     "
+    "                                        "
+    "- Force VGA                             "
+    "- Cable Detect                          "
+    "- Switch Trick VGA                      "
+    "                                        "
+    "  Save: After saving the Dreamcast      "
+    "        has to be power cycled for      "
+    "        for the changes to take         "
+    "        effect.                         "
+    "                                        "
+    "                                        "
+    "          A: Save  B: Cancel            "
+);
+
+char OSD_FIRMWARE_MENU[521] = (
+    "Firmware                                "
+    "                                        "
+    "- Check                                 "
+    "- Download                              "
+    "- Flash                                 "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "          A: Select  B: Exit            "
+);
+
+char OSD_FIRMWARE_CHECK_MENU[521] = (
+    "Firmware Check                          "
+    "                                        "
+    "                                        "
+    "                                        "
+    "FPGA        XXXXXXXX                    "
+    "ESP         XXXXXXXX                    "
+    "index.html  XXXXXXXX                    "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "          A: Select  B: Exit            "
 );
 
 char OSD_DEBUG_MENU[521] = (
@@ -54,22 +118,23 @@ char OSD_DEBUG_MENU[521] = (
     "                B: Back                 "
 );
 
-typedef std::function<void(uint16_t controller_data)> ClickHandler;
-typedef std::function<void()> DisplayCallback;
+typedef std::function<void(uint16_t controller_data, uint8_t menu_activeLine)> ClickHandler;
+typedef std::function<uint8_t(uint8_t* menu_text)> PreDisplayHook;
 
 extern FPGATask fpgaTask;
-extern uint8_t menu_activeLine;
 
 class Menu
 {
   public:
-    Menu(const char* name, uint8_t* menu, uint8_t first_line, uint8_t last_line, ClickHandler handler, WriteCallbackHandlerFunction display_callback) :
+    Menu(const char* name, uint8_t* menu, uint8_t first_line, uint8_t last_line, ClickHandler handler, PreDisplayHook pre_hook, WriteCallbackHandlerFunction display_callback) :
         name(name),
         menu_text(menu),
         first_line(first_line),
         last_line(last_line),
         handler(handler),
-        display_callback(display_callback)
+        pre_hook(pre_hook),
+        display_callback(display_callback),
+        menu_activeLine(first_line)
     { };
 
     const char* Name() {
@@ -77,8 +142,12 @@ class Menu
     }
 
     void Display() {
-        fpgaTask.DoWriteToOSD(0, 9, menu_text, [&]() {
+        if (pre_hook != NULL) {
+            menu_activeLine = pre_hook(menu_text);
+        } else {
             menu_activeLine = first_line;
+        }
+        fpgaTask.DoWriteToOSD(0, 9, menu_text, [&]() {
             fpgaTask.Write(I2C_OSD_ACTIVE_LINE, menu_activeLine, display_callback);
         });
     }
@@ -96,12 +165,12 @@ class Menu
             return;
         }
         // pass all other pads to handler
-        handler(controller_data);
+        handler(controller_data, menu_activeLine);
     }
 
-    // void SetMenuText(uint8_t* menu) {
-    //     menu_text = menu;
-    // }
+    uint8_t* GetMenuText() {
+        return menu_text;
+    }
 
 private:
     const char* name;
@@ -109,7 +178,9 @@ private:
     uint8_t first_line;
     uint8_t last_line;
     ClickHandler handler;
+    PreDisplayHook pre_hook;
     WriteCallbackHandlerFunction display_callback;
+    uint8_t menu_activeLine;
 };
 
 #endif

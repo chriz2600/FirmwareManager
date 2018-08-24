@@ -33,8 +33,8 @@
 #define DEFAULT_CONF_IP_MASK ""
 #define DEFAULT_CONF_IP_DNS ""
 #define DEFAULT_HOST "dc-firmware-manager"
-#define DEFAULT_FORCEVGA "128"
-#define DEFAULT_RESOLUTION "0"
+#define DEFAULT_FORCEVGA VIDEO_MODE_STR_FORCE_VGA
+#define DEFAULT_RESOLUTION RESOLUTION_STR_1080p
 
 char ssid[64] = DEFAULT_SSID;
 char password[64] = DEFAULT_PASSWORD;
@@ -48,8 +48,8 @@ char confIPGateway[24] = DEFAULT_CONF_IP_GATEWAY;
 char confIPMask[24] = DEFAULT_CONF_IP_MASK;
 char confIPDNS[24] = DEFAULT_CONF_IP_DNS;
 char host[64] = DEFAULT_HOST;
-char forceVGA[8] = "";
-char configuredResolution[8] = "";
+char videoMode[16] = "";
+char configuredResolution[16] = "";
 const char* WiFiAPPSK = "geheim1234";
 IPAddress ipAddress( 192, 168, 4, 1 );
 bool inInitialSetupMode = false;
@@ -67,9 +67,10 @@ bool headerFound = false;
 String header = String();
 
 bool OSDOpen = false;
-uint8_t OSDCurrentResolution = RESOLUTION_1080p;
-uint8_t OSDForceVGA = VGA_ON;
-uint8_t menu_activeLine = 255;
+uint8_t CurrentResolution = RESOLUTION_1080p;
+uint8_t ForceVGA = VGA_ON;
+bool DelayVGA = false;
+
 MD5Builder md5;
 TaskManager taskManager;
 FlashTask flashTask(1);
@@ -77,6 +78,10 @@ FlashESPTask flashESPTask(1);
 FlashESPIndexTask flashESPIndexTask(1);
 
 extern Menu mainMenu;
+extern Menu outputResMenu;
+extern Menu outputResSaveMenu;
+extern Menu videoModeMenu;
+extern Menu firmwareMenu;
 Menu *currentMenu;
 // functions
 void setOSD(bool value, WriteCallbackHandlerFunction handler);
@@ -93,8 +98,31 @@ void closeOSD() {
 }
 
 void waitForI2CRecover();
+void readVideoMode();
+void writeVideoMode();
+void writeVideoMode2(String vidMode);
+void readCurrentResolution();
+void writeCurrentResolution();
+uint8_t cfgRes2Int(char* intResolution);
 
-Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](uint16_t controller_data) {
+///////////////////////////////////////////////////////////////////
+// Menus start -->
+///////////////////////////////////////////////////////////////////
+Menu outputResSaveMenu("OutputResSaveMenu", (uint8_t*) OSD_OUTPUT_RES_SAVE_MENU, 255, 255, [](uint16_t controller_data, uint8_t menu_activeLine) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        currentMenu = &outputResMenu;
+        currentMenu->Display();
+        return;
+    }
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
+        writeCurrentResolution();
+        currentMenu = &outputResMenu;
+        currentMenu->Display();
+        return;
+    }
+}, NULL, NULL);
+
+Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         currentMenu = &mainMenu;
         currentMenu->Display();
@@ -118,38 +146,90 @@ Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](u
                 break;
         }
 
-        bool valueChanged = (value != OSDCurrentResolution);
-        OSDCurrentResolution = value;
-        DBG_OUTPUT_PORT.printf("setting output resolution: %u\n", (OSDForceVGA | OSDCurrentResolution));
-        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDForceVGA | OSDCurrentResolution, [valueChanged](uint8_t Address, uint8_t Value) {
+        bool valueChanged = (value != CurrentResolution);
+        CurrentResolution = value;
+        DBG_OUTPUT_PORT.printf("setting output resolution: %u\n", (ForceVGA | CurrentResolution));
+        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, ForceVGA | CurrentResolution, [valueChanged](uint8_t Address, uint8_t Value) {
             DBG_OUTPUT_PORT.printf("switch resolution callback: %u\n", Value);
             if (valueChanged) {
                 waitForI2CRecover();
             }
             DBG_OUTPUT_PORT.printf("Turn FOLLOWUP save menu on!\n");
-            // TODO: Go to save output settings menu!
+            currentMenu = &outputResSaveMenu;
+            currentMenu->Display();
         });
         return;
     }
-}, [](uint8_t address, uint8_t value) {
-    DBG_OUTPUT_PORT.printf("Here in output res menu display callback!\n");
-    menu_activeLine = 14 - OSDCurrentResolution;
-    fpgaTask.Write(I2C_OSD_ACTIVE_LINE, menu_activeLine);
-    // char buffer[521] = OSD_OUTPUT_RES_MENU;
-    // buffer[menu_activeLine*40] = ">";
-    // currentMenu->SetMenuText((uint8_t*) buffer);
-    //currentMenu->Display(false, NULL);
-});
+}, [](uint8_t* menu_text) {
+    // restore original menu text
+    for (int i = (11 - 9) ; i <= (14 - 9) ; i++) {
+        menu_text[i*40] = '-';
+    }
+    menu_text[(14 - 9 - cfgRes2Int(configuredResolution)) * 40] = '>';
+    return (14 - CurrentResolution);
+}, NULL);
 
-Menu debugMenu("DebugMenu", (uint8_t*) OSD_DEBUG_MENU, 255, 255, [](uint16_t controller_data) {
+Menu videoModeMenu("VideoModeMenu", (uint8_t*) OSD_VIDEO_MODE_MENU, 11, 13, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         currentMenu = &mainMenu;
         currentMenu->Display();
         return;
     }
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
+        String vidMode = VIDEO_MODE_STR_CABLE_DETECT;
+
+        switch (menu_activeLine) {
+            case 11:
+                vidMode = VIDEO_MODE_STR_FORCE_VGA;
+                break;
+            case 12:
+                vidMode = VIDEO_MODE_STR_CABLE_DETECT;
+                break;
+            case 13:
+                vidMode = VIDEO_MODE_STR_SWITCH_TRICK;
+                break;
+        }
+
+        writeVideoMode2(vidMode);
+        currentMenu = &mainMenu;
+        currentMenu->Display();
+        return;
+    }
+}, [](uint8_t* menu_text) {
+    String vidMode = String(videoMode);
+
+    if (vidMode == VIDEO_MODE_STR_FORCE_VGA) {
+        return 11;
+    } else if (vidMode == VIDEO_MODE_STR_SWITCH_TRICK) {
+        return 13;
+    }
+    
+    // default: VIDEO_MODE_STR_CABLE_DETECT
+    return 12;
 }, NULL);
 
-Menu mainMenu("MainMenu", (uint8_t*) OSD_MAIN_MENU, 11, 12, [](uint16_t controller_data) {
+Menu firmwareMenu("FirmwareMenu", (uint8_t*) OSD_FIRMWARE_MENU, 11, 13, [](uint16_t controller_data, uint8_t menu_activeLine) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        currentMenu = &mainMenu;
+        currentMenu->Display();
+        return;
+    }
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
+        // currentMenu = &mainMenu;
+        // currentMenu->Display();
+        return;
+    }
+}, NULL, NULL);
+
+Menu debugMenu("DebugMenu", (uint8_t*) OSD_DEBUG_MENU, 255, 255, [](uint16_t controller_data, uint8_t menu_activeLine) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        currentMenu = &mainMenu;
+        currentMenu->Display();
+        return;
+    }
+}, NULL, NULL);
+
+Menu mainMenu("MainMenu", (uint8_t*) OSD_MAIN_MENU, 11, 14, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         closeOSD();
         return;
@@ -161,13 +241,16 @@ Menu mainMenu("MainMenu", (uint8_t*) OSD_MAIN_MENU, 11, 12, [](uint16_t controll
                 currentMenu->Display();
                 break;
             case 12:
-                currentMenu = &debugMenu;
+                currentMenu = &videoModeMenu;
                 currentMenu->Display();
                 break;
         }
         return;
     }
-}, NULL);
+}, NULL, NULL);
+///////////////////////////////////////////////////////////////////
+// <-- Menus end
+///////////////////////////////////////////////////////////////////
 
 FPGATask fpgaTask(1, [](uint16_t controller_data) {
     if (!OSDOpen && CHECK_BIT(controller_data, CTRLR_TRIGGER_OSD)) {
@@ -175,7 +258,7 @@ FPGATask fpgaTask(1, [](uint16_t controller_data) {
         return;
     }
     if (OSDOpen) {
-        DBG_OUTPUT_PORT.printf("Menu: %s %x\n", currentMenu->Name(), controller_data);
+        //DBG_OUTPUT_PORT.printf("Menu: %s %x\n", currentMenu->Name(), controller_data);
         currentMenu->HandleClick(controller_data);
     }
 });
@@ -199,8 +282,8 @@ void waitForI2CRecover() {
 }
 
 void switchResolution(uint8_t newValue) {
-    OSDCurrentResolution = newValue;
-    fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDForceVGA | OSDCurrentResolution, NULL);
+    CurrentResolution = newValue;
+    fpgaTask.Write(I2C_OUTPUT_RESOLUTION, ForceVGA | CurrentResolution, NULL);
 }
 
 void setOSD(bool value, WriteCallbackHandlerFunction handler) {
@@ -425,6 +508,44 @@ void handleESPIndexDownload(AsyncWebServerRequest *request) {
 
     _handleDownload(request, ESP_INDEX_STAGING_FILE, httpGet);
 }
+
+// void getMD5SumsFromServer(String httpGet) {
+//     aClient = new AsyncClient();
+//     aClient->onError([](void *arg, AsyncClient *client, int error) {
+//         aClient = NULL;
+//         delete client;
+//     }, NULL);
+
+//     aClient->onConnect([ httpGet ](void *arg, AsyncClient *client) {
+//         aClient->onError(NULL, NULL);
+
+//         client->onDisconnect([](void *arg, AsyncClient *c) {
+//             aClient = NULL;
+//             delete c;
+//         }, NULL);
+    
+//         client->onData([](void *arg, AsyncClient *c, void *data, size_t len) {
+//             uint8_t* d = (uint8_t*) data;
+
+//             String sData = String((char*) data);
+//             int idx = sData.indexOf("\r\n\r\n");
+//             if (idx != -1) {
+//                 d = (uint8_t*) sData.substring(idx + 4).c_str();
+//                 len = (len - (idx + 4));
+//             }
+//         }, NULL);
+    
+//         //send the request
+//         DBG_OUTPUT_PORT.println("Requesting firmware...");
+//         client->write(httpGet.c_str());
+//     });
+
+//     if (!aClient->connect(firmwareServer, 80)) {
+//         AsyncClient *client = aClient;
+//         aClient = NULL;
+//         delete client;
+//     }
+// }
 
 void _handleDownload(AsyncWebServerRequest *request, const char *filename, String httpGet) {
     headerFound = false;
@@ -777,6 +898,8 @@ void setupHTTPServer() {
         // remove legacy config data
         SPIFFS.remove("/etc/firmware_fpga");
         SPIFFS.remove("/etc/firmware_format");
+        SPIFFS.remove("/etc/force_vga");
+        SPIFFS.remove("/etc/resolution");
         request->send(200);
     });
 
@@ -972,7 +1095,7 @@ void setupHTTPServer() {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
         }
-        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDForceVGA | OSDCurrentResolution | PLL_RESET_ON, NULL);
+        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, ForceVGA | CurrentResolution | PLL_RESET_ON, NULL);
         request->send(200);
     });
 
@@ -1042,20 +1165,84 @@ void setupTaskManager() {
     taskManager.StartTask(&fpgaTask);
 }
 
+void readVideoMode() {
+    _readFile("/etc/video/mode", videoMode, 16, DEFAULT_FORCEVGA);
+    String vidMode = String(videoMode);
+
+    if (vidMode == VIDEO_MODE_STR_FORCE_VGA) {
+        ForceVGA = VGA_ON;
+        DelayVGA = false;
+    } else if (vidMode == VIDEO_MODE_STR_SWITCH_TRICK) {
+        ForceVGA = VGA_ON;
+        DelayVGA = true;
+    } else { // default: VIDEO_MODE_STR_CABLE_DETECT
+        ForceVGA = VGA_OFF;
+        DelayVGA = false;
+    }
+}
+
+void writeVideoMode() {
+    String vidMode = VIDEO_MODE_STR_CABLE_DETECT;
+
+    if (ForceVGA == VGA_ON && !DelayVGA) {
+        vidMode = VIDEO_MODE_STR_FORCE_VGA;
+    } else if (ForceVGA == VGA_ON && DelayVGA) {
+        vidMode = VIDEO_MODE_STR_SWITCH_TRICK;
+    }
+
+    writeVideoMode2(vidMode);
+}
+
+void writeVideoMode2(String vidMode) {
+    _writeFile("/etc/video/mode", vidMode.c_str(), 16);
+    snprintf(videoMode, 16, "%s", vidMode.c_str());
+}
+
+void readCurrentResolution() {
+    _readFile("/etc/video/resolution", configuredResolution, 16, DEFAULT_RESOLUTION);
+    CurrentResolution = cfgRes2Int(configuredResolution);
+}
+
+uint8_t cfgRes2Int(char* intResolution) {
+    String cfgRes = String(intResolution);
+
+    if (cfgRes == RESOLUTION_STR_960p) {
+        return RESOLUTION_960p;
+    } else if (cfgRes == RESOLUTION_STR_480p) {
+        return RESOLUTION_480p;
+    } else if (cfgRes == RESOLUTION_STR_VGA) {
+        return RESOLUTION_VGA;
+    }
+    // default is 1080p
+    return RESOLUTION_1080p;
+}
+
+void writeCurrentResolution() {
+    String cfgRes = RESOLUTION_STR_1080p;
+
+    if (CurrentResolution == RESOLUTION_960p) {
+        cfgRes = RESOLUTION_STR_960p;
+    } else if (CurrentResolution == RESOLUTION_480p) {
+        cfgRes = RESOLUTION_STR_480p;
+    } else if (CurrentResolution == RESOLUTION_VGA) {
+        cfgRes = RESOLUTION_STR_VGA;
+    }
+
+    _writeFile("/etc/video/resolution", cfgRes.c_str(), 16);
+    snprintf(configuredResolution, 16, "%s", cfgRes.c_str());
+}
+
 void setupOutputResolution() {
     int retryCount = 500;
     int retries = 0;
 
-    _readFile("/etc/force_vga", forceVGA, 8, DEFAULT_FORCEVGA);
-    OSDForceVGA = atoi(forceVGA);
+    readVideoMode();
+    readCurrentResolution();
 
-    _readFile("/etc/resolution", configuredResolution, 8, DEFAULT_RESOLUTION);
-    OSDCurrentResolution = atoi(configuredResolution);
-
-    DBG_OUTPUT_PORT.printf(">> Setting up output resolution: %x\n", OSDForceVGA | OSDCurrentResolution);
+    DBG_OUTPUT_PORT.printf(">> Setting up output resolution: %x\n", ForceVGA | CurrentResolution);
     while (retryCount >= 0) {
         retries++;
-        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, OSDForceVGA | OSDCurrentResolution, NULL);
+        fpgaTask.Write(I2C_OUTPUT_RESOLUTION, ForceVGA | CurrentResolution, NULL);
         fpgaTask.ForceLoop();
         retryCount--;
         if (last_error == NO_ERROR) {

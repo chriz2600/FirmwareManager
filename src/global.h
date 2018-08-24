@@ -44,6 +44,15 @@
 #define RESOLUTION_480p (0x02)
 #define RESOLUTION_VGA (0x03)
 
+#define RESOLUTION_STR_1080p "1080p"
+#define RESOLUTION_STR_960p "960p"
+#define RESOLUTION_STR_480p "480p"
+#define RESOLUTION_STR_VGA "VGA"
+
+#define VIDEO_MODE_STR_FORCE_VGA "ForceVGA"
+#define VIDEO_MODE_STR_CABLE_DETECT "CableDetect"
+#define VIDEO_MODE_STR_SWITCH_TRICK "SwitchTrick"
+
 #define VGA_OFF (0x00)
 #define VGA_ON (0x80)
 
