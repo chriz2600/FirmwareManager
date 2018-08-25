@@ -36,8 +36,6 @@
 #define DEFAULT_VIDEO_MODE VIDEO_MODE_STR_FORCE_VGA
 #define DEFAULT_VIDEO_RESOLUTION RESOLUTION_STR_1080p
 
-typedef std::function<void(String data)> ContentCallback;
-
 char ssid[64] = DEFAULT_SSID;
 char password[64] = DEFAULT_PASSWORD;
 char otaPassword[64] = DEFAULT_OTA_PASSWORD; 
@@ -66,13 +64,19 @@ int readLength;
 static AsyncClient *aClient = NULL;
 File flashFile;
 bool headerFound = false;
-String header = String();
-String responseData = String();
+String header = "";
+std::string responseData("");
 
 bool OSDOpen = false;
 uint8_t CurrentResolution = RESOLUTION_1080p;
 uint8_t ForceVGA = VGA_ON;
 bool DelayVGA = false;
+
+char md5FPGA[33];
+char md5ESP[33];
+char md5IndexHtml[33];
+bool md5CheckResult;
+bool newFWDownloaded;
 
 MD5Builder md5;
 TaskManager taskManager;
@@ -85,6 +89,8 @@ extern Menu outputResMenu;
 extern Menu outputResSaveMenu;
 extern Menu videoModeMenu;
 extern Menu firmwareMenu;
+extern Menu firmwareCheckMenu;
+extern Menu firmwareDownloadMenu;
 Menu *currentMenu;
 // functions
 void setOSD(bool value, WriteCallbackHandlerFunction handler);
@@ -111,7 +117,8 @@ uint8_t cfgRes2Int(char* intResolution);
 ///////////////////////////////////////////////////////////////////
 // Menus start -->
 ///////////////////////////////////////////////////////////////////
-Menu outputResSaveMenu("OutputResSaveMenu", (uint8_t*) OSD_OUTPUT_RES_SAVE_MENU, 255, 255, [](uint16_t controller_data, uint8_t menu_activeLine) {
+
+Menu outputResSaveMenu("OutputResSaveMenu", (uint8_t*) OSD_OUTPUT_RES_SAVE_MENU, NO_SELECT_LINE, NO_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         currentMenu = &outputResMenu;
         currentMenu->Display();
@@ -125,7 +132,9 @@ Menu outputResSaveMenu("OutputResSaveMenu", (uint8_t*) OSD_OUTPUT_RES_SAVE_MENU,
     }
 }, NULL, NULL);
 
-Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](uint16_t controller_data, uint8_t menu_activeLine) {
+///////////////////////////////////////////////////////////////////
+
+Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, MENU_OR_FIRST_SELECT_LINE, MENU_OR_LAST_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         currentMenu = &mainMenu;
         currentMenu->Display();
@@ -135,16 +144,16 @@ Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](u
         uint8_t value = RESOLUTION_1080p;
 
         switch (menu_activeLine) {
-            case 11:
+            case MENU_OR_LAST_SELECT_LINE-3:
                 value = RESOLUTION_VGA;
                 break;
-            case 12:
+            case MENU_OR_LAST_SELECT_LINE-2:
                 value = RESOLUTION_480p;
                 break;
-            case 13:
+            case MENU_OR_LAST_SELECT_LINE-1:
                 value = RESOLUTION_960p;
                 break;
-            case 14:
+            case MENU_OR_LAST_SELECT_LINE:
                 value = RESOLUTION_1080p;
                 break;
         }
@@ -152,12 +161,14 @@ Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](u
         bool valueChanged = (value != CurrentResolution);
         CurrentResolution = value;
         DBG_OUTPUT_PORT.printf("setting output resolution: %u\n", (ForceVGA | CurrentResolution));
+        currentMenu->startTransaction();
         fpgaTask.Write(I2C_OUTPUT_RESOLUTION, ForceVGA | CurrentResolution, [valueChanged](uint8_t Address, uint8_t Value) {
             DBG_OUTPUT_PORT.printf("switch resolution callback: %u\n", Value);
             if (valueChanged) {
                 waitForI2CRecover();
             }
             DBG_OUTPUT_PORT.printf("Turn FOLLOWUP save menu on!\n");
+            currentMenu->endTransaction();
             currentMenu = &outputResSaveMenu;
             currentMenu->Display();
         });
@@ -165,14 +176,16 @@ Menu outputResMenu("OutputResMenu", (uint8_t*) OSD_OUTPUT_RES_MENU, 11, 14, [](u
     }
 }, [](uint8_t* menu_text) {
     // restore original menu text
-    for (int i = (11 - 9) ; i <= (14 - 9) ; i++) {
-        menu_text[i*40] = '-';
+    for (int i = (MENU_OR_LAST_SELECT_LINE-3) ; i <= MENU_OR_LAST_SELECT_LINE ; i++) {
+        menu_text[i * MENU_WIDTH] = '-';
     }
-    menu_text[(14 - 9 - cfgRes2Int(configuredResolution)) * 40] = '>';
-    return (14 - CurrentResolution);
+    menu_text[(MENU_OR_LAST_SELECT_LINE - cfgRes2Int(configuredResolution)) * MENU_WIDTH] = '>';
+    return (MENU_OR_LAST_SELECT_LINE - CurrentResolution);
 }, NULL);
 
-Menu videoModeMenu("VideoModeMenu", (uint8_t*) OSD_VIDEO_MODE_MENU, 11, 13, [](uint16_t controller_data, uint8_t menu_activeLine) {
+///////////////////////////////////////////////////////////////////
+
+Menu videoModeMenu("VideoModeMenu", (uint8_t*) OSD_VIDEO_MODE_MENU, MENU_VM_FIRST_SELECT_LINE, MENU_VM_LAST_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         currentMenu = &mainMenu;
         currentMenu->Display();
@@ -182,13 +195,13 @@ Menu videoModeMenu("VideoModeMenu", (uint8_t*) OSD_VIDEO_MODE_MENU, 11, 13, [](u
         String vidMode = VIDEO_MODE_STR_CABLE_DETECT;
 
         switch (menu_activeLine) {
-            case 11:
+            case MENU_VM_FORCE_VGA_LINE:
                 vidMode = VIDEO_MODE_STR_FORCE_VGA;
                 break;
-            case 12:
+            case MENU_VM_CABLE_DETECT_LINE:
                 vidMode = VIDEO_MODE_STR_CABLE_DETECT;
                 break;
-            case 13:
+            case MENU_VM_SWITCH_TRICK_LINE:
                 vidMode = VIDEO_MODE_STR_SWITCH_TRICK;
                 break;
         }
@@ -200,31 +213,271 @@ Menu videoModeMenu("VideoModeMenu", (uint8_t*) OSD_VIDEO_MODE_MENU, 11, 13, [](u
     }
 }, [](uint8_t* menu_text) {
     String vidMode = String(videoMode);
-
     if (vidMode == VIDEO_MODE_STR_FORCE_VGA) {
-        return 11;
+        return MENU_VM_FORCE_VGA_LINE;
     } else if (vidMode == VIDEO_MODE_STR_SWITCH_TRICK) {
-        return 13;
+        return MENU_VM_SWITCH_TRICK_LINE;
     }
-    
-    // default: VIDEO_MODE_STR_CABLE_DETECT
-    return 12;
+    return MENU_VM_CABLE_DETECT_LINE;
 }, NULL);
 
-Menu firmwareMenu("FirmwareMenu", (uint8_t*) OSD_FIRMWARE_MENU, 11, 13, [](uint16_t controller_data, uint8_t menu_activeLine) {
+Menu firmwareMenu("FirmwareMenu", (uint8_t*) OSD_FIRMWARE_MENU, MENU_FW_FIRST_SELECT_LINE, MENU_FW_LAST_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         currentMenu = &mainMenu;
         currentMenu->Display();
         return;
     }
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
-        // currentMenu = &mainMenu;
-        // currentMenu->Display();
+        switch (menu_activeLine) {
+            case MENU_FW_CHECK_LINE:
+                currentMenu = &firmwareCheckMenu;
+                currentMenu->Display();
+                break;
+            case MENU_FW_DOWNLOAD_LINE:
+                break;
+            case MENU_FW_FLASH_LINE:
+                break;
+        }
         return;
     }
 }, NULL, NULL);
 
-Menu debugMenu("DebugMenu", (uint8_t*) OSD_DEBUG_MENU, 255, 255, [](uint16_t controller_data, uint8_t menu_activeLine) {
+///////////////////////////////////////////////////////////////////
+
+Menu firmwareCheckMenu("FirmwareCheckMenu", (uint8_t*) OSD_FIRMWARE_CHECK_MENU, NO_SELECT_LINE, NO_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        currentMenu = &firmwareMenu;
+        currentMenu->Display();
+        return;
+    }
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
+        return;
+    }
+}, NULL, [](uint8_t Address, uint8_t Value) {
+    md5CheckResult = false;
+    md5Cascade(0);
+});
+
+void md5Cascade(int pos) {
+    DBG_OUTPUT_PORT.printf("md5Cascade: %i\n", pos);
+    switch (pos) {
+        case 0:
+            currentMenu->startTransaction();
+            md5Cascade(pos + 1);
+            break;
+        case 1:
+            readStoredMD5Sum(pos, MENU_FWC_FPGA_LINE, LOCAL_FPGA_MD5, md5FPGA);
+            break;
+        case 2:
+            readStoredMD5Sum(pos, MENU_FWC_ESP_LINE, LOCAL_ESP_MD5, md5ESP);
+            break;
+        case 3:
+            readStoredMD5Sum(pos, MENU_FWC_INDEXHTML_LINE, LOCAL_ESP_INDEX_MD5, md5IndexHtml);
+            break;
+        case 4:
+            getMD5SumFromServer(REMOTE_FPGA_HOST, REMOTE_FPGA_MD5, createMD5Callback(pos, MENU_FWC_FPGA_LINE, md5FPGA));
+            break;
+        case 5:
+            getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_MD5, createMD5Callback(pos, MENU_FWC_ESP_LINE, md5ESP));
+            break;
+        case 6:
+            getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_INDEX_MD5, createMD5Callback(pos, MENU_FWC_INDEXHTML_LINE, md5IndexHtml));
+            break;
+        case 7:
+            const char* result;
+            if (md5CheckResult) {
+                result = (
+                    "     Firmware update is available!      "
+                    "       Please download firmware!"
+                );
+            } else {
+                result = (
+                    "       Firmware is up to date!"
+                );
+            }
+            fpgaTask.DoWriteToOSD(0, MENU_OFFSET + MENU_FWC_RESULT_LINE, (uint8_t*) result, [ pos ]() {
+                md5Cascade(pos + 1);
+            });
+            break;
+        default:
+            currentMenu->endTransaction();
+            break;
+    }
+}
+
+void readStoredMD5Sum(int pos, int line, const char* fname, char* md5sum) {
+    char value[9];
+    _readFile(fname, md5sum, 33, DEFAULT_MD5_SUM);
+    snprintf(value, 9, "%.8s", md5sum);
+    fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) value, [ pos ]() {
+        md5Cascade(pos + 1);
+    });
+}
+
+ContentCallback createMD5Callback(int pos, int line, char* storedMD5Sum) {
+    return [pos, line, storedMD5Sum](std::string data, int error) {
+        char md5Sum[33] = "[error!]";
+        char result[19] = "";
+        bool isError = (error != NO_ERROR);
+
+        if (!isError) {
+            data.copy(md5Sum, 33, 0);
+        }
+        if (strncmp(storedMD5Sum, md5Sum, 32) != 0) {
+            snprintf(result, 19, "%.8s  %s", md5Sum, (!isError ? "Update!" : ""));
+            md5CheckResult |= (!isError);
+        } else {
+            snprintf(result, 19, "%.8s", md5Sum);
+        }
+        fpgaTask.DoWriteToOSD(22, MENU_OFFSET + line, (uint8_t*) result, [ pos ]() {
+            md5Cascade(pos + 1);
+        });
+    };
+}
+
+///////////////////////////////////////////////////////////////////
+
+Menu firmwareDownloadMenu("FirmwareDownloadMenu", (uint8_t*) OSD_FIRMWARE_DOWNLOAD_MENU, NO_SELECT_LINE, NO_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        currentMenu = &firmwareMenu;
+        currentMenu->Display();
+        return;
+    }
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
+        return;
+    }
+}, NULL, [](uint8_t Address, uint8_t Value) {
+    newFWDownloaded = false;
+    downloadCascade(0, false);
+});
+
+void downloadCascade(int pos, bool forceDownload) {
+    DBG_OUTPUT_PORT.printf("downloadCascade: %i\n", pos);
+    switch (pos) {
+        case 0:
+            currentMenu->startTransaction();
+            downloadCascade(pos + 1, forceDownload);
+            break;
+        /*
+            FPGA
+        */
+        case 1: // Check for FPGA firmware version
+            if (forceDownload) {
+                downloadCascade(pos + 1, forceDownload);
+            } else {
+                _readFile(LOCAL_FPGA_MD5, md5FPGA, 33, DEFAULT_MD5_SUM);
+                getMD5SumFromServer(REMOTE_FPGA_HOST, REMOTE_FPGA_MD5, createMD5DownloadCallback(pos, forceDownload, md5FPGA));
+            }
+            break;
+        case 2: // Download FPGA firmware
+            handleFPGADownload(NULL, createProgressCallback(pos, forceDownload, MENU_FWD_FPGA_LINE));
+            break;
+        /*
+            ESP
+        */
+        case 3: // Check for ESP firmware version
+            if (forceDownload) {
+                downloadCascade(pos + 1, forceDownload);
+            } else {
+                _readFile(LOCAL_ESP_MD5, md5ESP, 33, DEFAULT_MD5_SUM);
+                getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_MD5, createMD5DownloadCallback(pos, forceDownload, md5ESP));
+            }
+            break;
+        case 4: // Download ESP firmware
+            handleESPDownload(NULL, createProgressCallback(pos, forceDownload, MENU_FWD_ESP_LINE));
+            break;
+        /*
+            ESP INDEX
+        */
+        case 5: // Check for ESP index.html version
+            if (forceDownload) {
+                downloadCascade(pos + 1, forceDownload);
+            } else {
+                _readFile(LOCAL_ESP_MD5, md5IndexHtml, 33, DEFAULT_MD5_SUM);
+                getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_INDEX_MD5, createMD5DownloadCallback(pos, forceDownload, md5IndexHtml));
+            }
+            break;
+        case 6: // Download ESP index.html
+            handleESPIndexDownload(NULL, createProgressCallback(pos, forceDownload, MENU_FWD_INDEXHTML_LINE));
+            break;
+        case 7:
+            const char* result;
+            if (newFWDownloaded) {
+                result = (
+                    "   Firmware successfully downloaded!    "
+                    "         Please flash firmware!"
+                );
+            } else {
+                result = (
+                    "       Firmware is up to date!"
+                );
+            }
+            fpgaTask.DoWriteToOSD(0, MENU_OFFSET + MENU_FWD_RESULT_LINE, (uint8_t*) result, [ pos, forceDownload ]() {
+                downloadCascade(pos + 1, forceDownload);
+            });
+            break;
+        default:
+            currentMenu->endTransaction();
+            break;
+    }
+}
+
+ProgressCallback createProgressCallback(int pos, bool forceDownload, int line) {
+    return [ pos, forceDownload, line ](int read, int total, bool done, int error) {
+        if (error != NO_ERROR) {
+            // TODO: handle error
+            downloadCascade(pos + 1, forceDownload);
+            return;
+        }
+
+        if (done) {
+            fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) "[********************] done.", [ pos, forceDownload ]() {
+                // IMPORTANT: do only advance here !!!!!
+                downloadCascade(pos + 1, forceDownload);
+            });
+            return;
+        }
+
+        // download size is yet unknown
+        if (total <= 0) {
+            return;
+        }
+
+        int stars = (int)(read * 20 / total);
+        int blanks = 20 - stars;
+        int percent = (int)(read * 100 / total);
+        char result[32];
+
+        snprintf(result, 32, "[%.*s%*c] %3d%%\n", stars, "********************", blanks, ' ', percent);
+        fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) result);
+    };
+}
+
+ContentCallback createMD5DownloadCallback(int pos, bool forceDownload, char* storedMD5Sum) {
+    return [pos, forceDownload, storedMD5Sum](std::string data, int error) {
+        if (error != NO_ERROR) {
+            // TODO: handle error
+            downloadCascade(pos + 1, forceDownload);
+            return;
+        }
+
+        char md5Sum[33];
+        data.copy(md5Sum, 33, 0);
+
+        if (strncmp(storedMD5Sum, md5Sum, 32) != 0) {
+            // new firmware file available
+            newFWDownloaded |= true;
+            downloadCascade(pos + 1, forceDownload);
+        } else {
+            downloadCascade(pos + 2, forceDownload);
+        }
+    };
+}
+
+
+///////////////////////////////////////////////////////////////////
+
+Menu debugMenu("DebugMenu", (uint8_t*) OSD_DEBUG_MENU, NO_SELECT_LINE, NO_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         currentMenu = &mainMenu;
         currentMenu->Display();
@@ -232,25 +485,32 @@ Menu debugMenu("DebugMenu", (uint8_t*) OSD_DEBUG_MENU, 255, 255, [](uint16_t con
     }
 }, NULL, NULL);
 
-Menu mainMenu("MainMenu", (uint8_t*) OSD_MAIN_MENU, 11, 14, [](uint16_t controller_data, uint8_t menu_activeLine) {
+///////////////////////////////////////////////////////////////////
+
+Menu mainMenu("MainMenu", (uint8_t*) OSD_MAIN_MENU, MENU_M_FIRST_SELECT_LINE, MENU_M_LAST_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         closeOSD();
         return;
     }
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
         switch (menu_activeLine) {
-            case 11:
+            case MENU_M_OR:
                 currentMenu = &outputResMenu;
                 currentMenu->Display();
                 break;
-            case 12:
+            case MENU_M_VM:
                 currentMenu = &videoModeMenu;
+                currentMenu->Display();
+                break;
+            case MENU_M_FW:
+                currentMenu = &firmwareMenu;
                 currentMenu->Display();
                 break;
         }
         return;
     }
 }, NULL, NULL);
+
 ///////////////////////////////////////////////////////////////////
 // <-- Menus end
 ///////////////////////////////////////////////////////////////////
@@ -266,8 +526,9 @@ FPGATask fpgaTask(1, [](uint16_t controller_data) {
     }
 });
 
+// poll I2C slave and wait for a no error condition with a maximum number of tries
 void waitForI2CRecover() {
-    int retryCount = 2600;
+    int retryCount = I2C_RECOVER_TRIES;
     int prev_last_error = NO_ERROR;
     DBG_OUTPUT_PORT.printf("... PRE: prev_last_error/last_error %i (%u/%u)\n", retryCount, prev_last_error, last_error);
     while (retryCount >= 0) {
@@ -278,7 +539,7 @@ void waitForI2CRecover() {
         }
         prev_last_error = last_error;
         retryCount--;
-        delayMicroseconds(200);
+        delayMicroseconds(I2C_RECOVER_RETRY_INTERVAL_US);
         yield();
     }
     DBG_OUTPUT_PORT.printf("... POST: prev_last_error/last_error %i (%u/%u)\n", retryCount, prev_last_error, last_error);
@@ -466,16 +727,28 @@ void handleESPIndexFlash(AsyncWebServerRequest *request) {
 }
 
 void handleFPGADownload(AsyncWebServerRequest *request) {
+    handleFPGADownload(request, NULL);
+}
+
+void handleESPDownload(AsyncWebServerRequest *request) {
+    handleESPDownload(request, NULL);
+}
+
+void handleESPIndexDownload(AsyncWebServerRequest *request) {
+    handleESPIndexDownload(request, NULL);
+}
+
+void handleFPGADownload(AsyncWebServerRequest *request, ProgressCallback progressCallback) {
     String httpGet = "GET /fw/" 
         + String(firmwareVersion) 
         + "/DCxPlus-default"
         + "." + FIRMWARE_EXTENSION 
         + " HTTP/1.0\r\nHost: dc.i74.de\r\n\r\n";
 
-    _handleDownload(request, FIRMWARE_FILE, httpGet);
+    _handleDownload(request, FIRMWARE_FILE, httpGet, progressCallback);
 }
 
-void handleESPDownload(AsyncWebServerRequest *request) {
+void handleESPDownload(AsyncWebServerRequest *request, ProgressCallback progressCallback) {
     String httpGet = "GET /" 
         + String(firmwareVersion) 
         + "/" + (ESP.getFlashChipSize() / 1024 / 1024) + "MB"
@@ -483,36 +756,37 @@ void handleESPDownload(AsyncWebServerRequest *request) {
         + "." + ESP_FIRMWARE_EXTENSION 
         + " HTTP/1.0\r\nHost: esp.i74.de\r\n\r\n";
 
-    _handleDownload(request, ESP_FIRMWARE_FILE, httpGet);
+    _handleDownload(request, ESP_FIRMWARE_FILE, httpGet, progressCallback);
 }
 
-void handleESPIndexDownload(AsyncWebServerRequest *request) {
+void handleESPIndexDownload(AsyncWebServerRequest *request, ProgressCallback progressCallback) {
     String httpGet = "GET /"
         + String(firmwareVersion)
         + "/esp.index.html.gz"
         + " HTTP/1.0\r\nHost: esp.i74.de\r\n\r\n";
 
-    _handleDownload(request, ESP_INDEX_STAGING_FILE, httpGet);
+    _handleDownload(request, ESP_INDEX_STAGING_FILE, httpGet, progressCallback);
 }
 
 void getMD5SumFromServer(String host, String url, ContentCallback contentCallback) {
     String httpGet = "GET " + url + " HTTP/1.0\r\nHost: " + host + "\r\n\r\n";
     headerFound = false;
     last_error = NO_ERROR;
-    responseData = "";
+    responseData.clear();
     aClient = new AsyncClient();
-    aClient->onError([](void *arg, AsyncClient *client, int error) {
+    aClient->onError([ contentCallback ](void *arg, AsyncClient *client, int error) {
         aClient = NULL;
         delete client;
+        contentCallback(responseData, UNKNOWN_ERROR);
     }, NULL);
 
     aClient->onConnect([ httpGet, contentCallback ](void *arg, AsyncClient *client) {
         aClient->onError(NULL, NULL);
 
         client->onDisconnect([ contentCallback ](void *arg, AsyncClient *c) {
-            contentCallback(responseData);
             aClient = NULL;
             delete c;
+            contentCallback(responseData, NO_ERROR);
         }, NULL);
     
         client->onData([](void *arg, AsyncClient *c, void *data, size_t len) {
@@ -522,10 +796,10 @@ void getMD5SumFromServer(String host, String url, ContentCallback contentCallbac
                 if (idx == -1) {
                     return;
                 }
-                responseData += sData.substring(idx + 4);
+                responseData.append(sData.substring(idx + 4, len).c_str());
                 headerFound = true;
             } else {
-                responseData += sData;
+                responseData.append(sData.substring(0, len).c_str());
             }
         }, NULL);
     
@@ -538,12 +812,13 @@ void getMD5SumFromServer(String host, String url, ContentCallback contentCallbac
         AsyncClient *client = aClient;
         aClient = NULL;
         delete client;
+        contentCallback(responseData, UNKNOWN_ERROR);
     }
 }
 
-void _handleDownload(AsyncWebServerRequest *request, const char *filename, String httpGet) {
+void _handleDownload(AsyncWebServerRequest *request, const char *filename, String httpGet, ProgressCallback progressCallback) {
     headerFound = false;
-    header = String();
+    header = "";
     totalLength = -1;
     readLength = -1;
     last_error = NO_ERROR;
@@ -553,17 +828,18 @@ void _handleDownload(AsyncWebServerRequest *request, const char *filename, Strin
     if (flashFile) {
         aClient = new AsyncClient();
 
-        aClient->onError([](void *arg, AsyncClient *client, int error) {
+        aClient->onError([ progressCallback ](void *arg, AsyncClient *client, int error) {
             DBG_OUTPUT_PORT.println("Connect Error");
             aClient = NULL;
             delete client;
+            PROGRESS_CALLBACK(false, UNKNOWN_ERROR);
         }, NULL);
     
-        aClient->onConnect([ filename, httpGet ](void *arg, AsyncClient *client) {
+        aClient->onConnect([ filename, httpGet, progressCallback ](void *arg, AsyncClient *client) {
             DBG_OUTPUT_PORT.println("Connected");
             aClient->onError(NULL, NULL);
 
-            client->onDisconnect([ filename ](void *arg, AsyncClient *c) {
+            client->onDisconnect([ filename, progressCallback ](void *arg, AsyncClient *c) {
                 DBG_OUTPUT_PORT.println("onDisconnect");
                 flashFile.close();
                 md5.calculate();
@@ -572,9 +848,10 @@ void _handleDownload(AsyncWebServerRequest *request, const char *filename, Strin
                 DBG_OUTPUT_PORT.println("Disconnected");
                 aClient = NULL;
                 delete c;
+                PROGRESS_CALLBACK(true, NO_ERROR);
             }, NULL);
         
-            client->onData([](void *arg, AsyncClient *c, void *data, size_t len) {
+            client->onData([ progressCallback ](void *arg, AsyncClient *c, void *data, size_t len) {
                 uint8_t* d = (uint8_t*) data;
 
                 if (!headerFound) {
@@ -606,6 +883,7 @@ void _handleDownload(AsyncWebServerRequest *request, const char *filename, Strin
                 DBG_OUTPUT_PORT.printf("write: %i, %i/%i\n", len, readLength, totalLength);
                 flashFile.write(d, len);
                 md5.add(d, len);
+                PROGRESS_CALLBACK(false, NO_ERROR);
             }, NULL);
         
             //send the request
@@ -619,11 +897,13 @@ void _handleDownload(AsyncWebServerRequest *request, const char *filename, Strin
             AsyncClient *client = aClient;
             aClient = NULL;
             delete client;
+            PROGRESS_CALLBACK(false, UNKNOWN_ERROR);
         }
 
-        request->send(200);
+        if (request != NULL) { request->send(200); }
     } else {
-        request->send(500);
+        if (request != NULL) { request->send(500); }
+        PROGRESS_CALLBACK(false, UNKNOWN_ERROR);
     }
 }
 
@@ -1116,7 +1396,7 @@ void setupHTTPServer() {
 
     server.onNotFound([](AsyncWebServerRequest *request){
         if (request->url().endsWith(".md5")) {
-           request->send(200, "text/plain", "00000000000000000000000000000000\n");
+           request->send(200, "text/plain", DEFAULT_MD5_SUM"\n");
            return;
         }
         request->send(404);
@@ -1135,29 +1415,6 @@ void setupSPIFFS() {
             DBG_OUTPUT_PORT.printf("error.\n");
         }
     }
-    // {
-    //     FSInfo fs_info;
-    //     SPIFFS.info(fs_info);
-
-    //     DBG_OUTPUT_PORT.printf(">> totalBytes: (%u)\n", fs_info.totalBytes);
-    //     DBG_OUTPUT_PORT.printf(">> usedBytes: (%u)\n", fs_info.usedBytes);
-    //     DBG_OUTPUT_PORT.printf(">> blockSize: (%u)\n", fs_info.blockSize);
-    //     DBG_OUTPUT_PORT.printf(">> pageSize: (%u)\n", fs_info.pageSize);
-    //     DBG_OUTPUT_PORT.printf(">> maxOpenFiles: (%u)\n", fs_info.maxOpenFiles);
-    //     DBG_OUTPUT_PORT.printf(">> maxPathLength: (%u)\n", fs_info.maxPathLength);
-    //     DBG_OUTPUT_PORT.printf(">> maxSketchSpace 1: (%u)\n", ESP.getFreeSketchSpace());
-    //     DBG_OUTPUT_PORT.printf(">> maxSketchSpace 2: (%u)\n", (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000);
-    //     DBG_OUTPUT_PORT.printf(">> flashChipSize: (%u)\n", ESP.getFlashChipSize());
-    //     DBG_OUTPUT_PORT.printf(">> freeHeapSize: (%u)\n", ESP.getFreeHeap());
-
-    //     Dir dir = SPIFFS.openDir("/");
-    //     while (dir.next()) {
-    //         String fileName = dir.fileName();
-    //         size_t fileSize = dir.fileSize();
-    //         DBG_OUTPUT_PORT.printf(">> %s (%u)\n", fileName.c_str(), fileSize);
-    //     }
-    //     DBG_OUTPUT_PORT.printf("\n");
-    // }
 }
 
 void setupTaskManager() {
@@ -1278,12 +1535,6 @@ void setup(void) {
     }
 
     setOSD(false, NULL); fpgaTask.ForceLoop();
-
-    getMD5SumFromServer("dc.i74.de", "/fw/develop/DCxPlus-default.dc.md5", [](String data) {
-        data = (data.length() >= 8 ? data.substring(0, 8) : data);
-        DBG_OUTPUT_PORT.printf("Callback from getMD5SumFromServer: [%s]\n", data.c_str());
-    });
-
     DBG_OUTPUT_PORT.println(">> Ready.");
 }
 

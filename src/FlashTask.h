@@ -24,11 +24,21 @@ class FlashTask : public Task {
     public:
         FlashTask(uint8_t v) :
             Task(1),
-            dummy(v)
+            dummy(v),
+            progressCallback(NULL)
         { };
+
+        void SetProgressCallback(ProgressCallback callback) {
+            progressCallback = callback;
+        }
+
+        void ClearProgressCallback(ProgressCallback callback) {
+            progressCallback = NULL;
+        }
 
     private:
         uint8_t dummy;
+        ProgressCallback progressCallback;
 
         uint8_t *buffer = NULL;
         uint8_t *result = NULL;
@@ -60,12 +70,14 @@ class FlashTask : public Task {
                 if (header[0] != 'D' || header[1] != 'C' || header[2] != 0x07 || header[3] != 0x04) {
                     last_error = ERROR_WRONG_MAGIC;
                     // TODO: report header bytes via DEBUG
+                    InvokeCallback(false);
                     return false;
                 }
 
                 // check version
                 if (header[4] != 0x01 || header[5] != 0x00) {
                     last_error = ERROR_WRONG_VERSION;
+                    InvokeCallback(false);
                     return false;
                 }
 
@@ -90,6 +102,7 @@ class FlashTask : public Task {
                 return true;
             } else {
                 last_error = ERROR_FILE;
+                InvokeCallback(false);
                 return false;
             }
         }
@@ -105,6 +118,13 @@ class FlashTask : public Task {
             if (prevPercentComplete != percentComplete) {
                 prevPercentComplete = percentComplete;
                 DBG_OUTPUT_PORT.printf("[%i]\n", percentComplete);
+                InvokeCallback(false);
+            }
+        }
+
+        void InvokeCallback(bool done) {
+            if (progressCallback != NULL) {
+                progressCallback(readLength, totalLength, done, last_error);
             }
         }
 
@@ -172,6 +192,7 @@ class FlashTask : public Task {
             buffer = NULL;
             result = NULL;
             result_start = NULL;
+            InvokeCallback(true);
         }
 };
 

@@ -22,11 +22,21 @@ class FlashESPIndexTask : public Task {
     public:
         FlashESPIndexTask(uint8_t v) :
             Task(1),
-            dummy(v)
+            dummy(v),
+            progressCallback(NULL)
         { };
+
+        void SetProgressCallback(ProgressCallback callback) {
+            progressCallback = callback;
+        }
+
+        void ClearProgressCallback(ProgressCallback callback) {
+            progressCallback = NULL;
+        }
 
     private:
         uint8_t dummy;
+        ProgressCallback progressCallback;
         uint8_t buffer[BUFFER_SIZE];
         int prevPercentComplete;
         File sourceFile;
@@ -47,6 +57,7 @@ class FlashESPIndexTask : public Task {
                 return true;
             } else {
                 last_error = ERROR_FILE;
+                InvokeCallback(false);
                 return false;
             }
         }
@@ -71,6 +82,7 @@ class FlashESPIndexTask : public Task {
             int percentComplete = (totalLength <= 0 ? 0 : (int)(readLength * 100 / totalLength));
             if (prevPercentComplete != percentComplete) {
                 prevPercentComplete = percentComplete;
+                InvokeCallback(false);
                 DBG_OUTPUT_PORT.printf("[%i]\n", percentComplete);
             }
         }
@@ -81,7 +93,14 @@ class FlashESPIndexTask : public Task {
             md5.calculate();
             String md5sum = md5.toString();
             _writeFile("/index.html.gz.md5", md5sum.c_str(), md5sum.length());
+            InvokeCallback(true);
             DBG_OUTPUT_PORT.printf("2: flashing ESP index finished.\n");
+        }
+
+        void InvokeCallback(bool done) {
+            if (progressCallback != NULL) {
+                progressCallback(readLength, totalLength, done, last_error);
+            }
         }
 };
 

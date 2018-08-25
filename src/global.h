@@ -22,8 +22,10 @@
 
 #define PAGES 8192 // 8192 pages x 256 bytes = 2MB = 16MBit
 #define DEBUG true
+#define DEFAULT_MD5_SUM "00000000000000000000000000000000"
 
 #define NO_ERROR 0
+#define UNKNOWN_ERROR 255
 
 #define ERROR_WRONG_MAGIC 16
 #define ERROR_WRONG_VERSION 17
@@ -69,6 +71,9 @@
 #define I2C_POWER (0x84)
 #define I2C_PING (0xFF)
 
+#define I2C_RECOVER_TRIES 2600
+#define I2C_RECOVER_RETRY_INTERVAL_US 200
+
 // // controller data, int16
 // /*
 //     15: a, 14: b, 13: x, 12: y, 11: up, 10: down, 09: left, 08: right
@@ -86,5 +91,20 @@
 #define CTRLR_LTRIGGER (1<<(6))
 #define CTRLR_RTRIGGER (1<<(5))
 #define CTRLR_TRIGGER_OSD (1<<(4))
+
+typedef std::function<void(std::string data, int error)> ContentCallback;
+typedef std::function<void(int read, int total, bool done, int error)> ProgressCallback;
+
+#define PROGRESS_CALLBACK(done, err) ((progressCallback != NULL) ? progressCallback(readLength, totalLength, done, err) : (void)NULL)
+
+#define LOCAL_FPGA_MD5 "/etc/last_flash_md5"
+#define REMOTE_FPGA_HOST "dc.i74.de"
+#define REMOTE_FPGA_MD5 ("/fw/" + String(firmwareVersion) + "/DCxPlus-default.dc.md5")
+
+#define REMOTE_ESP_HOST "esp.i74.de"
+#define LOCAL_ESP_MD5 "/etc/last_esp_flash_md5"
+#define REMOTE_ESP_MD5 ("/" + String(firmwareVersion) + "/4MB-firmware.bin.md5")
+#define LOCAL_ESP_INDEX_MD5 "/index.html.gz.md5"
+#define REMOTE_ESP_INDEX_MD5 ("/" + String(firmwareVersion) + "/esp.index.html.gz.md5")
 
 #endif
