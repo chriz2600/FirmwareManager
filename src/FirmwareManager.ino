@@ -77,6 +77,11 @@ char md5ESP[48];
 char md5IndexHtml[48];
 bool md5CheckResult;
 bool newFWDownloaded;
+bool newFWFlashed;
+
+bool firmwareCheckStarted;
+bool firmwareDownloadStarted;
+bool firmwareFlashStarted;
 
 MD5Builder md5;
 TaskManager taskManager;
@@ -91,6 +96,7 @@ extern Menu videoModeMenu;
 extern Menu firmwareMenu;
 extern Menu firmwareCheckMenu;
 extern Menu firmwareDownloadMenu;
+extern Menu firmwareFlashMenu;
 Menu *currentMenu;
 // functions
 void setOSD(bool value, WriteCallbackHandlerFunction handler);
@@ -238,6 +244,8 @@ Menu firmwareMenu("FirmwareMenu", (uint8_t*) OSD_FIRMWARE_MENU, MENU_FW_FIRST_SE
                 currentMenu->Display();
                 break;
             case MENU_FW_FLASH_LINE:
+                currentMenu = &firmwareFlashMenu;
+                currentMenu->Display();
                 break;
         }
         return;
@@ -253,11 +261,15 @@ Menu firmwareCheckMenu("FirmwareCheckMenu", (uint8_t*) OSD_FIRMWARE_CHECK_MENU, 
         return;
     }
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
+        if (!firmwareCheckStarted) {
+            firmwareCheckStarted = true;
+            md5CheckResult = false;
+            md5Cascade(0);
+        }
         return;
     }
 }, NULL, [](uint8_t Address, uint8_t Value) {
-    md5CheckResult = false;
-    md5Cascade(0);
+    firmwareCheckStarted = false;
 });
 
 void md5Cascade(int pos) {
@@ -268,24 +280,29 @@ void md5Cascade(int pos) {
             md5Cascade(pos + 1);
             break;
         case 1:
-            readStoredMD5Sum(pos, MENU_FWC_FPGA_LINE, LOCAL_FPGA_MD5, md5FPGA);
+            fpgaTask.DoWriteToOSD(0, MENU_OFFSET + MENU_BUTTON_LINE, (uint8_t*) MENU_BACK_LINE, [ pos ]() {
+                md5Cascade(pos + 1);
+            });
             break;
         case 2:
-            readStoredMD5Sum(pos, MENU_FWC_ESP_LINE, LOCAL_ESP_MD5, md5ESP);
+            readStoredMD5Sum(pos, MENU_FWC_FPGA_LINE, LOCAL_FPGA_MD5, md5FPGA);
             break;
         case 3:
-            readStoredMD5Sum(pos, MENU_FWC_INDEXHTML_LINE, LOCAL_ESP_INDEX_MD5, md5IndexHtml);
+            readStoredMD5Sum(pos, MENU_FWC_ESP_LINE, LOCAL_ESP_MD5, md5ESP);
             break;
         case 4:
-            getMD5SumFromServer(REMOTE_FPGA_HOST, REMOTE_FPGA_MD5, createMD5Callback(pos, MENU_FWC_FPGA_LINE, md5FPGA));
+            readStoredMD5Sum(pos, MENU_FWC_INDEXHTML_LINE, LOCAL_ESP_INDEX_MD5, md5IndexHtml);
             break;
         case 5:
-            getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_MD5, createMD5Callback(pos, MENU_FWC_ESP_LINE, md5ESP));
+            getMD5SumFromServer(REMOTE_FPGA_HOST, REMOTE_FPGA_MD5, createMD5Callback(pos, MENU_FWC_FPGA_LINE, md5FPGA));
             break;
         case 6:
-            getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_INDEX_MD5, createMD5Callback(pos, MENU_FWC_INDEXHTML_LINE, md5IndexHtml));
+            getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_MD5, createMD5Callback(pos, MENU_FWC_ESP_LINE, md5ESP));
             break;
         case 7:
+            getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_INDEX_MD5, createMD5Callback(pos, MENU_FWC_INDEXHTML_LINE, md5IndexHtml));
+            break;
+        case 8:
             const char* result;
             if (md5CheckResult) {
                 result = (
@@ -348,11 +365,15 @@ Menu firmwareDownloadMenu("FirmwareDownloadMenu", (uint8_t*) OSD_FIRMWARE_DOWNLO
         return;
     }
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
+        if (!firmwareDownloadStarted) {
+            firmwareDownloadStarted = true;
+            newFWDownloaded = false;
+            downloadCascade(0, false);
+        }
         return;
     }
 }, NULL, [](uint8_t Address, uint8_t Value) {
-    newFWDownloaded = false;
-    downloadCascade(0, false);
+    firmwareDownloadStarted = false;
 });
 
 void downloadCascade(int pos, bool forceDownload) {
@@ -362,55 +383,60 @@ void downloadCascade(int pos, bool forceDownload) {
             currentMenu->startTransaction();
             downloadCascade(pos + 1, forceDownload);
             break;
+        case 1:
+            fpgaTask.DoWriteToOSD(0, MENU_OFFSET + MENU_BUTTON_LINE, (uint8_t*) MENU_BACK_LINE, [ pos, forceDownload ]() {
+                downloadCascade(pos + 1, forceDownload);
+            });
+            break;
         /*
             FPGA
         */
-        case 1: // Check for FPGA firmware version
+        case 2: // Check for FPGA firmware version
             if (forceDownload) {
                 downloadCascade(pos + 2, forceDownload);
             } else {
-                readStoredMD5SumDownload(pos, forceDownload, LOCAL_FPGA_MD5, md5FPGA);
+                readStoredMD5SumDownload(pos, forceDownload, STAGED_FPGA_MD5, md5FPGA);
             }
             break;
-        case 2:
+        case 3:
             getMD5SumFromServer(REMOTE_FPGA_HOST, REMOTE_FPGA_MD5, createMD5DownloadCallback(pos, forceDownload, MENU_FWD_FPGA_LINE, md5FPGA));
             break;
-        case 3: // Download FPGA firmware
+        case 4: // Download FPGA firmware
             handleFPGADownload(NULL, createProgressCallback(pos, forceDownload, MENU_FWD_FPGA_LINE));
             break;
         /*
             ESP
         */
-        case 4: // Check for ESP firmware version
+        case 5: // Check for ESP firmware version
             if (forceDownload) {
                 downloadCascade(pos + 2, forceDownload);
             } else {
-                readStoredMD5SumDownload(pos, forceDownload, LOCAL_ESP_MD5, md5ESP);
+                readStoredMD5SumDownload(pos, forceDownload, STAGED_ESP_MD5, md5ESP);
             }
             break;
-        case 5:
+        case 6:
             getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_MD5, createMD5DownloadCallback(pos, forceDownload, MENU_FWD_ESP_LINE, md5ESP));
             break;
-        case 6: // Download ESP firmware
+        case 7: // Download ESP firmware
             handleESPDownload(NULL, createProgressCallback(pos, forceDownload, MENU_FWD_ESP_LINE));
             break;
         /*
             ESP INDEX
         */
-        case 7: // Check for ESP index.html version
+        case 8: // Check for ESP index.html version
             if (forceDownload) {
                 downloadCascade(pos + 2, forceDownload);
             } else {
-                readStoredMD5SumDownload(pos, forceDownload, LOCAL_ESP_INDEX_MD5, md5IndexHtml);
+                readStoredMD5SumDownload(pos, forceDownload, STAGED_ESP_INDEX_MD5, md5IndexHtml);
             }
             break;
-        case 8:
+        case 9:
             getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_INDEX_MD5, createMD5DownloadCallback(pos, forceDownload, MENU_FWD_INDEXHTML_LINE, md5IndexHtml));
             break;
-        case 9: // Download ESP index.html
+        case 10: // Download ESP index.html
             handleESPIndexDownload(NULL, createProgressCallback(pos, forceDownload, MENU_FWD_INDEXHTML_LINE));
             break;
-        case 10:
+        case 11:
             const char* result;
             if (newFWDownloaded) {
                 result = (
@@ -457,18 +483,7 @@ ProgressCallback createProgressCallback(int pos, bool forceDownload, int line) {
             return;
         }
 
-        // download size may be yet unknown
-        if (total <= 0) {
-            return;
-        }
-
-        int stars = (int)(read * 20 / total);
-        int blanks = 20 - stars;
-        int percent = (int)(read * 100 / total);
-        char result[32];
-
-        snprintf(result, 32, "[%.*s%*c] %3d%% ", stars, "********************", blanks, ' ', percent);
-        fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) result);
+        displayProgress(read, total, line);
     };
 }
 
@@ -487,13 +502,180 @@ ContentCallback createMD5DownloadCallback(int pos, bool forceDownload, int line,
             // new firmware file available
             downloadCascade(pos + 1, forceDownload);
         } else {
-            fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) "No update available.        ", [ pos, forceDownload ]() {
+            fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) "File already downloaded.    ", [ pos, forceDownload ]() {
                 downloadCascade(pos + 2, forceDownload);
             });
         }
     };
 }
 
+///////////////////////////////////////////////////////////////////
+
+Menu firmwareFlashMenu("FirmwareFlashMenu", (uint8_t*) OSD_FIRMWARE_FLASH_MENU, NO_SELECT_LINE, NO_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        currentMenu = &firmwareMenu;
+        currentMenu->Display();
+        return;
+    }
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
+        if (!firmwareFlashStarted) {
+            firmwareFlashStarted = true;
+            newFWFlashed = false;
+            flashCascade(0, false);
+        }
+        return;
+    }
+}, NULL, [](uint8_t Address, uint8_t Value) {
+    firmwareFlashStarted = false;
+});
+
+void flashCascade(int pos, bool force) {
+    DBG_OUTPUT_PORT.printf("flashCascade: %i\n", pos);
+    switch (pos) {
+        case 0:
+            currentMenu->startTransaction();
+            flashCascade(pos + 1, force);
+            break;
+        case 1:
+            fpgaTask.DoWriteToOSD(0, MENU_OFFSET + MENU_BUTTON_LINE, (uint8_t*) MENU_BACK_LINE, [ pos, force ]() {
+                flashCascade(pos + 1, force);
+            });
+            break;
+        /*
+            FPGA
+        */
+        case 2: // Check for FPGA firmware version
+            if (force) {
+                flashCascade(pos + 2, force);
+            } else {
+                readStoredMD5SumFlash(pos, force, STAGED_FPGA_MD5, md5FPGA);
+            }
+            break;
+        case 3:
+            checkStoredMD5SumFlash(pos, force, MENU_FWF_FPGA_LINE, LOCAL_FPGA_MD5, md5FPGA);
+            break;
+        case 4: // Flash FPGA firmware
+            flashTask.SetProgressCallback(createFlashProgressCallback(pos, force, MENU_FWF_FPGA_LINE));
+            taskManager.StartTask(&flashTask);
+            break;
+        /*
+            ESP
+        */
+        case 5: // Check for ESP firmware version
+            flashTask.ClearProgressCallback();
+            if (force) {
+                flashCascade(pos + 2, force);
+            } else {
+                readStoredMD5SumFlash(pos, force, STAGED_ESP_MD5, md5ESP);
+            }
+            break;
+        case 6:
+            checkStoredMD5SumFlash(pos, force, MENU_FWF_ESP_LINE, LOCAL_ESP_MD5, md5ESP);
+            break;
+        case 7: // Flash ESP firmware
+            flashESPTask.SetProgressCallback(createFlashProgressCallback(pos, force, MENU_FWF_ESP_LINE));
+            taskManager.StartTask(&flashESPTask);
+            break;
+        /*
+            ESP INDEX
+        */
+        case 8: // Check for ESP index.html version
+            flashESPTask.ClearProgressCallback();
+            if (force) {
+                flashCascade(pos + 2, force);
+            } else {
+                readStoredMD5SumFlash(pos, force, STAGED_ESP_INDEX_MD5, md5IndexHtml);
+            }
+            break;
+        case 9:
+            checkStoredMD5SumFlash(pos, force, MENU_FWF_INDEXHTML_LINE, LOCAL_ESP_INDEX_MD5, md5IndexHtml);
+            break;
+        case 10: // Flash ESP index.html
+            flashESPIndexTask.SetProgressCallback(createFlashProgressCallback(pos, force, MENU_FWF_INDEXHTML_LINE));
+            taskManager.StartTask(&flashESPIndexTask);
+            break;
+        case 11:
+            flashESPIndexTask.ClearProgressCallback();
+            const char* result;
+            if (newFWFlashed) {
+                result = (
+                    "     Firmware successfully flashed!     "
+                    "          Please reset system!          "
+                );
+            } else {
+                result = (
+                    "    Firmware is already up to date!"
+                );
+            }
+            fpgaTask.DoWriteToOSD(0, MENU_OFFSET + MENU_FWF_RESULT_LINE, (uint8_t*) result, [ pos, force ]() {
+                flashCascade(pos + 1, force);
+            });
+            break;
+        default:
+            currentMenu->endTransaction();
+            break;
+    }
+}
+
+void readStoredMD5SumFlash(int pos, bool force, const char* fname, char* md5sum) {
+    char value[9] = "";
+    _readFile(fname, md5sum, 33, DEFAULT_MD5_SUM);
+    fpgaTask.DoWriteToOSD(0, 0, (uint8_t*) value, [ pos, force ]() {
+        flashCascade(pos + 1, force);
+    });
+}
+
+void checkStoredMD5SumFlash(int pos, bool force, int line, const char* fname, char* storedMD5Sum) {
+    char value[9] = "";
+    char md5Sum[48];
+    _readFile(fname, md5Sum, 33, DEFAULT_MD5_SUM);
+    if (strncmp(storedMD5Sum, md5Sum, 32) != 0) {
+        // new firmware file available
+        fpgaTask.DoWriteToOSD(0, 0, (uint8_t*) value, [ pos, force ]() {
+            flashCascade(pos + 1, force);
+        });
+    } else {
+        fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) "File already flashed.       ", [ pos, force ]() {
+            flashCascade(pos + 2, force);
+        });
+    }
+}
+
+ProgressCallback createFlashProgressCallback(int pos, bool force, int line) {
+    return [ pos, force, line ](int read, int total, bool done, int error) {
+        if (error != NO_ERROR) {
+            // TODO: handle error
+            flashCascade(pos + 1, force);
+            return;
+        }
+
+        if (done) {
+            fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) "[********************] done.", [ pos, force ]() {
+                // IMPORTANT: do only advance here, if done is true!!!!!
+                newFWFlashed |= true;
+                flashCascade(pos + 1, force);
+            });
+            return;
+        }
+
+        displayProgress(read, total, line);
+    };
+}
+
+void displayProgress(int read, int total, int line) {
+    // download size may be yet unknown
+    if (total <= 0) {
+        return;
+    }
+
+    int stars = (int)(read * 20 / total);
+    int blanks = 20 - stars;
+    int percent = (int)(read * 100 / total);
+    char result[32];
+
+    snprintf(result, 32, "[%.*s%*c] %3d%% ", stars, "********************", blanks, ' ', percent);
+    fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) result);
+}
 
 ///////////////////////////////////////////////////////////////////
 
@@ -715,7 +897,7 @@ void resetall() {
     DBG_OUTPUT_PORT.printf("all reset requested...\n");
     enableFPGA();
     resetFPGAConfiguration();
-    ESP.eraseConfig();
+    //ESP.eraseConfig();
     ESP.restart();
 }
 

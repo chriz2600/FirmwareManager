@@ -32,7 +32,7 @@ class FlashTask : public Task {
             progressCallback = callback;
         }
 
-        void ClearProgressCallback(ProgressCallback callback) {
+        void ClearProgressCallback() {
             progressCallback = NULL;
         }
 

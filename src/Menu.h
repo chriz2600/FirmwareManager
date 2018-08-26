@@ -10,6 +10,9 @@
 #define MENU_WIDTH 40
 
 #define NO_SELECT_LINE 32
+#define MENU_START_LINE "          A: Start    B: Back           "
+#define MENU_BACK_LINE  "                B: Back                 "
+#define MENU_BUTTON_LINE 12
 
 #define MENU_M_OR 2
 #define MENU_M_VM 3
@@ -114,9 +117,9 @@ char OSD_FIRMWARE_MENU[521] = (
 #define MENU_FWC_INDEXHTML_LINE 6
 #define MENU_FWC_RESULT_LINE 8
 char OSD_FIRMWARE_CHECK_MENU[521] = (
-    "Firmware Check                          "
+    "Check Firmware                          "
     "                                        "
-    "Checking if newer firmware is available."
+    "Check, if newer firmware is available.  "
     "                                        "
     "FPGA        ________  ________          "
     "ESP         ________  ________          "
@@ -126,7 +129,7 @@ char OSD_FIRMWARE_CHECK_MENU[521] = (
     "                                        "
     "                                        "
     "                                        "
-    "                B: Back                 "
+    MENU_START_LINE
 );
 
 #define MENU_FWD_FPGA_LINE 4
@@ -134,9 +137,9 @@ char OSD_FIRMWARE_CHECK_MENU[521] = (
 #define MENU_FWD_INDEXHTML_LINE 6
 #define MENU_FWD_RESULT_LINE 8
 char OSD_FIRMWARE_DOWNLOAD_MENU[521] = (
-    "Firmware Download                       "
+    "Download Firmware                       "
     "                                        "
-    "Downloading firmware files.             "
+    "Download firmware files.                "
     "                                        "
     "FPGA        [                    ]      "
     "ESP         [                    ]      "
@@ -146,7 +149,27 @@ char OSD_FIRMWARE_DOWNLOAD_MENU[521] = (
     "                                        "
     "                                        "
     "                                        "
-    "                B: Back                 "
+    MENU_START_LINE
+);
+
+#define MENU_FWF_FPGA_LINE 4
+#define MENU_FWF_ESP_LINE 5
+#define MENU_FWF_INDEXHTML_LINE 6
+#define MENU_FWF_RESULT_LINE 8
+char OSD_FIRMWARE_FLASH_MENU[521] = (
+    "Flash Firmware                          "
+    "                                        "
+    "Flash downloaded firmware files.        "
+    "                                        "
+    "FPGA        [                    ]      "
+    "ESP         [                    ]      "
+    "index.html  [                    ]      "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    MENU_START_LINE
 );
 
 char OSD_DEBUG_MENU[521] = (
