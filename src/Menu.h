@@ -94,15 +94,16 @@ char OSD_VIDEO_MODE_MENU[521] = (
 #define MENU_FW_CHECK_LINE 2
 #define MENU_FW_DOWNLOAD_LINE 3
 #define MENU_FW_FLASH_LINE 4
+#define MENU_FW_RESET_LINE 5
 #define MENU_FW_FIRST_SELECT_LINE 2
-#define MENU_FW_LAST_SELECT_LINE 4
+#define MENU_FW_LAST_SELECT_LINE 5
 char OSD_FIRMWARE_MENU[521] = (
     "Firmware                                "
     "                                        "
     "- Check                                 "
     "- Download                              "
     "- Flash                                 "
-    "                                        "
+    "- Reset                                 "
     "                                        "
     "                                        "
     "                                        "
@@ -170,6 +171,22 @@ char OSD_FIRMWARE_FLASH_MENU[521] = (
     "                                        "
     "                                        "
     MENU_START_LINE
+);
+
+char OSD_FIRMWARE_RESET_MENU[521] = (
+    "Reset Firmware                          "
+    "                                        "
+    "             Reset DCHDMI?              "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "                                        "
+    "          A: Ok    B: Cancel            "
 );
 
 char OSD_DEBUG_MENU[521] = (

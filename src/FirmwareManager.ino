@@ -97,6 +97,7 @@ extern Menu firmwareMenu;
 extern Menu firmwareCheckMenu;
 extern Menu firmwareDownloadMenu;
 extern Menu firmwareFlashMenu;
+extern Menu firmwareResetMenu;
 Menu *currentMenu;
 // functions
 void setOSD(bool value, WriteCallbackHandlerFunction handler);
@@ -245,6 +246,10 @@ Menu firmwareMenu("FirmwareMenu", (uint8_t*) OSD_FIRMWARE_MENU, MENU_FW_FIRST_SE
                 break;
             case MENU_FW_FLASH_LINE:
                 currentMenu = &firmwareFlashMenu;
+                currentMenu->Display();
+                break;
+            case MENU_FW_RESET_LINE:
+                currentMenu = &firmwareResetMenu;
                 currentMenu->Display();
                 break;
         }
@@ -627,7 +632,7 @@ void readStoredMD5SumFlash(int pos, bool force, const char* fname, char* md5sum)
 
 void checkStoredMD5SumFlash(int pos, bool force, int line, const char* fname, char* storedMD5Sum) {
     char value[9] = "";
-    char md5Sum[48];
+    char md5Sum[48] = "";
     _readFile(fname, md5Sum, 33, DEFAULT_MD5_SUM);
     if (strncmp(storedMD5Sum, md5Sum, 32) != 0) {
         // new firmware file available
@@ -661,6 +666,22 @@ ProgressCallback createFlashProgressCallback(int pos, bool force, int line) {
         displayProgress(read, total, line);
     };
 }
+
+///////////////////////////////////////////////////////////////////
+
+Menu firmwareResetMenu("FirmwareResetMenu", (uint8_t*) OSD_FIRMWARE_RESET_MENU, NO_SELECT_LINE, NO_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        currentMenu = &firmwareMenu;
+        currentMenu->Display();
+        return;
+    }
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
+        resetall();
+        return;
+    }
+}, NULL, NULL);
+
+///////////////////////////////////////////////////////////////////
 
 void displayProgress(int read, int total, int line) {
     // download size may be yet unknown
