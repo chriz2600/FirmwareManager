@@ -72,9 +72,9 @@ uint8_t CurrentResolution = RESOLUTION_1080p;
 uint8_t ForceVGA = VGA_ON;
 bool DelayVGA = false;
 
-char md5FPGA[33];
-char md5ESP[33];
-char md5IndexHtml[33];
+char md5FPGA[48];
+char md5ESP[48];
+char md5IndexHtml[48];
 bool md5CheckResult;
 bool newFWDownloaded;
 
@@ -234,6 +234,8 @@ Menu firmwareMenu("FirmwareMenu", (uint8_t*) OSD_FIRMWARE_MENU, MENU_FW_FIRST_SE
                 currentMenu->Display();
                 break;
             case MENU_FW_DOWNLOAD_LINE:
+                currentMenu = &firmwareDownloadMenu;
+                currentMenu->Display();
                 break;
             case MENU_FW_FLASH_LINE:
                 break;
@@ -305,6 +307,7 @@ void md5Cascade(int pos) {
     }
 }
 
+
 void readStoredMD5Sum(int pos, int line, const char* fname, char* md5sum) {
     char value[9];
     _readFile(fname, md5sum, 33, DEFAULT_MD5_SUM);
@@ -317,18 +320,19 @@ void readStoredMD5Sum(int pos, int line, const char* fname, char* md5sum) {
 ContentCallback createMD5Callback(int pos, int line, char* storedMD5Sum) {
     return [pos, line, storedMD5Sum](std::string data, int error) {
         char md5Sum[33] = "[error!]";
-        char result[19] = "";
+        char result[32] = "";
         bool isError = (error != NO_ERROR);
 
         if (!isError) {
             data.copy(md5Sum, 33, 0);
         }
         if (strncmp(storedMD5Sum, md5Sum, 32) != 0) {
-            snprintf(result, 19, "%.8s  %s", md5Sum, (!isError ? "Update!" : ""));
+            snprintf(result, 19, "%.8s  %s", md5Sum, (!isError ? "Update!" : "OK"));
             md5CheckResult |= (!isError);
         } else {
             snprintf(result, 19, "%.8s", md5Sum);
         }
+
         fpgaTask.DoWriteToOSD(22, MENU_OFFSET + line, (uint8_t*) result, [ pos ]() {
             md5Cascade(pos + 1);
         });
@@ -363,44 +367,50 @@ void downloadCascade(int pos, bool forceDownload) {
         */
         case 1: // Check for FPGA firmware version
             if (forceDownload) {
-                downloadCascade(pos + 1, forceDownload);
+                downloadCascade(pos + 2, forceDownload);
             } else {
-                _readFile(LOCAL_FPGA_MD5, md5FPGA, 33, DEFAULT_MD5_SUM);
-                getMD5SumFromServer(REMOTE_FPGA_HOST, REMOTE_FPGA_MD5, createMD5DownloadCallback(pos, forceDownload, md5FPGA));
+                readStoredMD5SumDownload(pos, forceDownload, LOCAL_FPGA_MD5, md5FPGA);
             }
             break;
-        case 2: // Download FPGA firmware
+        case 2:
+            getMD5SumFromServer(REMOTE_FPGA_HOST, REMOTE_FPGA_MD5, createMD5DownloadCallback(pos, forceDownload, MENU_FWD_FPGA_LINE, md5FPGA));
+            break;
+        case 3: // Download FPGA firmware
             handleFPGADownload(NULL, createProgressCallback(pos, forceDownload, MENU_FWD_FPGA_LINE));
             break;
         /*
             ESP
         */
-        case 3: // Check for ESP firmware version
+        case 4: // Check for ESP firmware version
             if (forceDownload) {
-                downloadCascade(pos + 1, forceDownload);
+                downloadCascade(pos + 2, forceDownload);
             } else {
-                _readFile(LOCAL_ESP_MD5, md5ESP, 33, DEFAULT_MD5_SUM);
-                getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_MD5, createMD5DownloadCallback(pos, forceDownload, md5ESP));
+                readStoredMD5SumDownload(pos, forceDownload, LOCAL_ESP_MD5, md5ESP);
             }
             break;
-        case 4: // Download ESP firmware
+        case 5:
+            getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_MD5, createMD5DownloadCallback(pos, forceDownload, MENU_FWD_ESP_LINE, md5ESP));
+            break;
+        case 6: // Download ESP firmware
             handleESPDownload(NULL, createProgressCallback(pos, forceDownload, MENU_FWD_ESP_LINE));
             break;
         /*
             ESP INDEX
         */
-        case 5: // Check for ESP index.html version
+        case 7: // Check for ESP index.html version
             if (forceDownload) {
-                downloadCascade(pos + 1, forceDownload);
+                downloadCascade(pos + 2, forceDownload);
             } else {
-                _readFile(LOCAL_ESP_MD5, md5IndexHtml, 33, DEFAULT_MD5_SUM);
-                getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_INDEX_MD5, createMD5DownloadCallback(pos, forceDownload, md5IndexHtml));
+                readStoredMD5SumDownload(pos, forceDownload, LOCAL_ESP_INDEX_MD5, md5IndexHtml);
             }
             break;
-        case 6: // Download ESP index.html
+        case 8:
+            getMD5SumFromServer(REMOTE_ESP_HOST, REMOTE_ESP_INDEX_MD5, createMD5DownloadCallback(pos, forceDownload, MENU_FWD_INDEXHTML_LINE, md5IndexHtml));
+            break;
+        case 9: // Download ESP index.html
             handleESPIndexDownload(NULL, createProgressCallback(pos, forceDownload, MENU_FWD_INDEXHTML_LINE));
             break;
-        case 7:
+        case 10:
             const char* result;
             if (newFWDownloaded) {
                 result = (
@@ -422,6 +432,14 @@ void downloadCascade(int pos, bool forceDownload) {
     }
 }
 
+void readStoredMD5SumDownload(int pos, bool forceDownload, const char* fname, char* md5sum) {
+    char value[9] = "";
+    _readFile(fname, md5sum, 33, DEFAULT_MD5_SUM);
+    fpgaTask.DoWriteToOSD(0, 0, (uint8_t*) value, [ pos, forceDownload ]() {
+        downloadCascade(pos + 1, forceDownload);
+    });
+}
+
 ProgressCallback createProgressCallback(int pos, bool forceDownload, int line) {
     return [ pos, forceDownload, line ](int read, int total, bool done, int error) {
         if (error != NO_ERROR) {
@@ -432,13 +450,14 @@ ProgressCallback createProgressCallback(int pos, bool forceDownload, int line) {
 
         if (done) {
             fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) "[********************] done.", [ pos, forceDownload ]() {
-                // IMPORTANT: do only advance here !!!!!
+                // IMPORTANT: do only advance here, if done is true!!!!!
+                newFWDownloaded |= true;
                 downloadCascade(pos + 1, forceDownload);
             });
             return;
         }
 
-        // download size is yet unknown
+        // download size may be yet unknown
         if (total <= 0) {
             return;
         }
@@ -448,13 +467,13 @@ ProgressCallback createProgressCallback(int pos, bool forceDownload, int line) {
         int percent = (int)(read * 100 / total);
         char result[32];
 
-        snprintf(result, 32, "[%.*s%*c] %3d%%\n", stars, "********************", blanks, ' ', percent);
+        snprintf(result, 32, "[%.*s%*c] %3d%% ", stars, "********************", blanks, ' ', percent);
         fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) result);
     };
 }
 
-ContentCallback createMD5DownloadCallback(int pos, bool forceDownload, char* storedMD5Sum) {
-    return [pos, forceDownload, storedMD5Sum](std::string data, int error) {
+ContentCallback createMD5DownloadCallback(int pos, bool forceDownload, int line, char* storedMD5Sum) {
+    return [pos, forceDownload, line, storedMD5Sum](std::string data, int error) {
         if (error != NO_ERROR) {
             // TODO: handle error
             downloadCascade(pos + 1, forceDownload);
@@ -466,10 +485,11 @@ ContentCallback createMD5DownloadCallback(int pos, bool forceDownload, char* sto
 
         if (strncmp(storedMD5Sum, md5Sum, 32) != 0) {
             // new firmware file available
-            newFWDownloaded |= true;
             downloadCascade(pos + 1, forceDownload);
         } else {
-            downloadCascade(pos + 2, forceDownload);
+            fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) "No update available.        ", [ pos, forceDownload ]() {
+                downloadCascade(pos + 2, forceDownload);
+            });
         }
     };
 }
@@ -570,7 +590,7 @@ void _readFile(const char *filename, char *target, unsigned int len, const char*
     if (exists) {
         File f = SPIFFS.open(filename, "r");
         if (f) {
-            f.readString().toCharArray(target, len);
+            f.readBytes(target, len);
             f.close();
             DBG_OUTPUT_PORT.printf(">> _readFile: %s:[%s]\n", filename, target);
             readFromFile = true;
@@ -775,18 +795,18 @@ void getMD5SumFromServer(String host, String url, ContentCallback contentCallbac
     responseData.clear();
     aClient = new AsyncClient();
     aClient->onError([ contentCallback ](void *arg, AsyncClient *client, int error) {
+        contentCallback(responseData, UNKNOWN_ERROR);
         aClient = NULL;
         delete client;
-        contentCallback(responseData, UNKNOWN_ERROR);
     }, NULL);
 
     aClient->onConnect([ httpGet, contentCallback ](void *arg, AsyncClient *client) {
         aClient->onError(NULL, NULL);
 
         client->onDisconnect([ contentCallback ](void *arg, AsyncClient *c) {
+            contentCallback(responseData, NO_ERROR);
             aClient = NULL;
             delete c;
-            contentCallback(responseData, NO_ERROR);
         }, NULL);
     
         client->onData([](void *arg, AsyncClient *c, void *data, size_t len) {
@@ -809,10 +829,10 @@ void getMD5SumFromServer(String host, String url, ContentCallback contentCallbac
     });
 
     if (!aClient->connect(firmwareServer, 80)) {
+        contentCallback(responseData, UNKNOWN_ERROR);
         AsyncClient *client = aClient;
         aClient = NULL;
         delete client;
-        contentCallback(responseData, UNKNOWN_ERROR);
     }
 }
 
@@ -830,14 +850,14 @@ void _handleDownload(AsyncWebServerRequest *request, const char *filename, Strin
 
         aClient->onError([ progressCallback ](void *arg, AsyncClient *client, int error) {
             DBG_OUTPUT_PORT.println("Connect Error");
+            PROGRESS_CALLBACK(false, UNKNOWN_ERROR);
             aClient = NULL;
             delete client;
-            PROGRESS_CALLBACK(false, UNKNOWN_ERROR);
         }, NULL);
     
         aClient->onConnect([ filename, httpGet, progressCallback ](void *arg, AsyncClient *client) {
             DBG_OUTPUT_PORT.println("Connected");
-            aClient->onError(NULL, NULL);
+            //aClient->onError(NULL, NULL);
 
             client->onDisconnect([ filename, progressCallback ](void *arg, AsyncClient *c) {
                 DBG_OUTPUT_PORT.println("onDisconnect");
@@ -846,9 +866,9 @@ void _handleDownload(AsyncWebServerRequest *request, const char *filename, Strin
                 String md5sum = md5.toString();
                 _writeFile((String(filename) + ".md5").c_str(), md5sum.c_str(), md5sum.length());
                 DBG_OUTPUT_PORT.println("Disconnected");
+                PROGRESS_CALLBACK(true, NO_ERROR);
                 aClient = NULL;
                 delete c;
-                PROGRESS_CALLBACK(true, NO_ERROR);
             }, NULL);
         
             client->onData([ progressCallback ](void *arg, AsyncClient *c, void *data, size_t len) {
@@ -885,7 +905,7 @@ void _handleDownload(AsyncWebServerRequest *request, const char *filename, Strin
                 md5.add(d, len);
                 PROGRESS_CALLBACK(false, NO_ERROR);
             }, NULL);
-        
+
             //send the request
             DBG_OUTPUT_PORT.printf("Requesting: %s\n", httpGet.c_str());
             client->write(httpGet.c_str());
@@ -895,9 +915,9 @@ void _handleDownload(AsyncWebServerRequest *request, const char *filename, Strin
         if (!aClient->connect(firmwareServer, 80)) {
             DBG_OUTPUT_PORT.println("Connect Fail");
             AsyncClient *client = aClient;
+            PROGRESS_CALLBACK(false, UNKNOWN_ERROR);
             aClient = NULL;
             delete client;
-            PROGRESS_CALLBACK(false, UNKNOWN_ERROR);
         }
 
         if (request != NULL) { request->send(200); }

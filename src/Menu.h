@@ -9,7 +9,7 @@
 #define MENU_OFFSET 9
 #define MENU_WIDTH 40
 
-#define NO_SELECT_LINE 255
+#define NO_SELECT_LINE 32
 
 #define MENU_M_OR 2
 #define MENU_M_VM 3
@@ -176,12 +176,12 @@ class Menu
     Menu(const char* name, uint8_t* menu, uint8_t first_line, uint8_t last_line, ClickHandler handler, PreDisplayHook pre_hook, WriteCallbackHandlerFunction display_callback) :
         name(name),
         menu_text(menu),
-        first_line(MENU_OFFSET+first_line),
-        last_line(MENU_OFFSET+last_line),
+        first_line(first_line),
+        last_line(last_line),
         handler(handler),
         pre_hook(pre_hook),
         display_callback(display_callback),
-        menu_activeLine(MENU_OFFSET+first_line),
+        menu_activeLine(first_line),
         inTransaction(false)
     { };
 
@@ -204,6 +204,7 @@ class Menu
             menu_activeLine = first_line;
         }
         fpgaTask.DoWriteToOSD(0, 9, menu_text, [&]() {
+            DBG_OUTPUT_PORT.printf("%i %i\n", menu_activeLine, MENU_OFFSET + menu_activeLine);
             fpgaTask.Write(I2C_OSD_ACTIVE_LINE, MENU_OFFSET + menu_activeLine, display_callback);
         });
     }
