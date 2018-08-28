@@ -237,11 +237,13 @@ class Menu
         inTransaction = false;
     }
 
+    void StoreMenuActiveLine(uint8_t line) {
+        menu_activeLine = line;
+    }
+
     void Display() {
         if (pre_hook != NULL) {
             menu_activeLine = pre_hook(menu_text);
-        } else {
-            menu_activeLine = first_line;
         }
         fpgaTask.DoWriteToOSD(0, 9, menu_text, [&]() {
             DBG_OUTPUT_PORT.printf("%i %i\n", menu_activeLine, MENU_OFFSET + menu_activeLine);

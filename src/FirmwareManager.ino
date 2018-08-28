@@ -230,6 +230,7 @@ Menu videoModeMenu("VideoModeMenu", (uint8_t*) OSD_VIDEO_MODE_MENU, MENU_VM_FIRS
 
 Menu firmwareMenu("FirmwareMenu", (uint8_t*) OSD_FIRMWARE_MENU, MENU_FW_FIRST_SELECT_LINE, MENU_FW_LAST_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        currentMenu->StoreMenuActiveLine(MENU_FW_FIRST_SELECT_LINE);
         currentMenu = &mainMenu;
         currentMenu->Display();
         return;
@@ -712,6 +713,7 @@ Menu debugMenu("DebugMenu", (uint8_t*) OSD_DEBUG_MENU, NO_SELECT_LINE, NO_SELECT
 
 Menu mainMenu("MainMenu", (uint8_t*) OSD_MAIN_MENU, MENU_M_FIRST_SELECT_LINE, MENU_M_LAST_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        currentMenu->StoreMenuActiveLine(MENU_M_FIRST_SELECT_LINE);
         closeOSD();
         return;
     }
