@@ -636,14 +636,21 @@ void checkStoredMD5SumFlash(int pos, bool force, int line, const char* fname, ch
     char value[9] = "";
     char md5Sum[48] = "";
     _readFile(fname, md5Sum, 33, DEFAULT_MD5_SUM);
-    if (strncmp(storedMD5Sum, md5Sum, 32) != 0) {
+
+    DBG_OUTPUT_PORT.printf("[%s] [%s] %i\n", storedMD5Sum, md5Sum, strncmp(storedMD5Sum, md5Sum, 32));
+
+    if (strncmp(storedMD5Sum, DEFAULT_MD5_SUM, 32) == 0) {
+        fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) "No file to flash available. ", [ pos, force ]() {
+            flashCascade(pos + 2, force);
+        });
+    } else if (strncmp(storedMD5Sum, md5Sum, 32) == 0) {
+        fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) "File already flashed.       ", [ pos, force ]() {
+            flashCascade(pos + 2, force);
+        });
+    } else {
         // new firmware file available
         fpgaTask.DoWriteToOSD(0, 0, (uint8_t*) value, [ pos, force ]() {
             flashCascade(pos + 1, force);
-        });
-    } else {
-        fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) "File already flashed.       ", [ pos, force ]() {
-            flashCascade(pos + 2, force);
         });
     }
 }
@@ -696,7 +703,11 @@ void displayProgress(int read, int total, int line) {
     int percent = (int)(read * 100 / total);
     char result[32];
 
-    snprintf(result, 32, "[%.*s%*c] %3d%% ", stars, "********************", blanks, ' ', percent);
+    if (blanks > 0) {
+        snprintf(result, 32, "[%.*s%*c] %3d%% ", stars, "********************", blanks, ' ', percent);
+    } else {
+        snprintf(result, 32, "[%.*s] %3d%% ", stars, "********************", percent);
+    }
     fpgaTask.DoWriteToOSD(12, MENU_OFFSET + line, (uint8_t*) result);
 }
 
@@ -708,7 +719,61 @@ Menu infoMenu("InfoMenu", (uint8_t*) OSD_INFO_MENU, NO_SELECT_LINE, NO_SELECT_LI
         currentMenu->Display();
         return;
     }
-}, NULL, NULL);
+}, NULL, [](uint8_t Address, uint8_t Value) {
+    fpgaTask.Read(DEBUG_BASE_ADDRESS, DEBUG_DATA_LEN, [](uint8_t address, uint8_t* buffer, uint8_t len){
+        char result[9*40] = "";
+
+        if (address == DEBUG_BASE_ADDRESS && len == DEBUG_DATA_LEN) {
+            uint16_t frameCounter = (buffer[DBG_DATA_FRAMECOUNTER_HIGH] << 8) | buffer[DBG_DATA_FRAMECOUNTER_LOW];
+            uint8_t restartCounter = buffer[DBG_DATA_RESTART_COUNT];
+            uint8_t hdmiIntCounter = buffer[DBG_DATA_HDMI_INT_COUNT];
+            uint8_t notReadyCounter = buffer[DBG_DATA_NOT_READY_COUNT];
+
+            uint8_t cts1 = buffer[DBG_DATA_CTS1_STATUS];
+            uint8_t maxcts1 = buffer[DBG_DATA_MAX_CTS1_STATUS];
+            uint8_t smaxcts1 = buffer[DBG_DATA_SUMMARY_CTS1_STATUS];
+
+            uint8_t cts2 = buffer[DBG_DATA_CTS2_STATUS];
+            uint8_t maxcts2 = buffer[DBG_DATA_MAX_CTS2_STATUS];
+            uint8_t smaxcts2 = buffer[DBG_DATA_SUMMARY_CTS2_STATUS];
+
+            uint8_t cts3 = buffer[DBG_DATA_CTS3_STATUS];
+            uint8_t maxcts3 = buffer[DBG_DATA_MAX_CTS3_STATUS];
+            uint8_t smaxcts3 = buffer[DBG_DATA_SUMMARY_CTS3_STATUS];
+            uint8_t ssmaxcts3 = buffer[DBG_DATA_SUMMARY_SUMMARY_CTS3_STATUS];
+
+            uint8_t pll_errors = buffer[DBG_DATA_PLL_ERRORS];
+
+            uint8_t idcheckhigh = buffer[DBG_DATA_ID_CHECK_HIGH];
+            uint8_t idchecklow = buffer[DBG_DATA_ID_CHECK_LOW];
+            uint8_t chiprevision = buffer[DBG_DATA_CHIP_REVISION];
+            uint8_t vicdetected = buffer[DBG_DATA_VIC_DETECTED];
+            uint8_t victorx = buffer[DBG_DATA_VIC_TO_RX];
+            uint8_t miscdata = buffer[DBG_DATA_MISC_DATA];
+
+            snprintf(result, 9*40, 
+                "FRM:  %04d  RC/HR/NR: %03d/%03d/%03d       "
+                "PLLE:  %03d                              "
+                "CTS1:  %03d %03d %03d                      "
+                "CTS2:  %03d %03d %03d                      "
+                "CTS3:  %03d %03d %03d %03d                  "
+                "CID:   %03d %03d %03d                      "
+                "VIC:   %03d %03d                          "
+                "MISC:  %x",
+                frameCounter, restartCounter, hdmiIntCounter, notReadyCounter, 
+                pll_errors,
+                cts1, maxcts1, smaxcts1,
+                cts2, maxcts2, smaxcts2,
+                cts3, maxcts3, smaxcts3, ssmaxcts3,
+                idcheckhigh, idchecklow, chiprevision,
+                vicdetected, victorx,
+                miscdata
+            );
+
+            fpgaTask.DoWriteToOSD(0, MENU_OFFSET + 2, (uint8_t*) result);
+        }
+    });
+});
 
 ///////////////////////////////////////////////////////////////////
 
@@ -730,6 +795,10 @@ Menu mainMenu("MainMenu", (uint8_t*) OSD_MAIN_MENU, MENU_M_FIRST_SELECT_LINE, ME
                 break;
             case MENU_M_FW:
                 currentMenu = &firmwareMenu;
+                currentMenu->Display();
+                break;
+            case MENU_M_INF:
+                currentMenu = &infoMenu;
                 currentMenu->Display();
                 break;
         }

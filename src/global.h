@@ -112,4 +112,32 @@ typedef std::function<void(int read, int total, bool done, int error)> ProgressC
 #define STAGED_ESP_INDEX_MD5 "/esp.index.html.gz.md5"
 #define REMOTE_ESP_INDEX_MD5 ("/" + String(firmwareVersion) + "/esp.index.html.gz.md5")
 
+#define DEBUG_BASE_ADDRESS 0x90
+#define DEBUG_DATA_LEN 24
+
+#define DBG_DATA_PLL_ERRORS 0
+#define DBG_DATA_TEST 1
+#define DBG_DATA_FRAMECOUNTER_LOW 2
+#define DBG_DATA_FRAMECOUNTER_HIGH 3
+#define DBG_DATA_PLL_STATUS 4
+#define DBG_DATA_ID_CHECK_HIGH 5
+#define DBG_DATA_ID_CHECK_LOW 6
+#define DBG_DATA_CHIP_REVISION 7
+#define DBG_DATA_VIC_DETECTED 8
+#define DBG_DATA_VIC_TO_RX 9
+#define DBG_DATA_MISC_DATA 10
+#define DBG_DATA_RESTART_COUNT 11
+#define DBG_DATA_CTS1_STATUS 12
+#define DBG_DATA_CTS2_STATUS 13
+#define DBG_DATA_CTS3_STATUS 14
+#define DBG_DATA_MAX_CTS1_STATUS 15
+#define DBG_DATA_MAX_CTS2_STATUS 16
+#define DBG_DATA_MAX_CTS3_STATUS 17
+#define DBG_DATA_SUMMARY_CTS1_STATUS 18
+#define DBG_DATA_SUMMARY_CTS2_STATUS 19
+#define DBG_DATA_SUMMARY_CTS3_STATUS 20
+#define DBG_DATA_SUMMARY_SUMMARY_CTS3_STATUS 21
+#define DBG_DATA_HDMI_INT_COUNT 22
+#define DBG_DATA_NOT_READY_COUNT 23
+
 #endif

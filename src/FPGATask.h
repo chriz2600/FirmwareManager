@@ -138,7 +138,7 @@ class FPGATask : public Task {
                 }
             } else if (DoRead) {
                 // Value is read len here
-                //DBG_OUTPUT_PORT.printf("Read: %x %x\n", Address, Value);
+                DBG_OUTPUT_PORT.printf("Read: %x %x\n", Address, Value);
                 uint8_t buffer[1];
                 uint8_t buffer2[Value];
                 buffer[0] = Address;

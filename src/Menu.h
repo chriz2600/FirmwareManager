@@ -192,7 +192,7 @@ char OSD_FIRMWARE_RESET_MENU[521] = (
 char OSD_INFO_MENU[521] = (
     "Info                                    "
     "                                        "
-    "COMING SOON                             "
+    "                                        "
     "                                        "
     "                                        "
     "                                        "
