@@ -98,6 +98,7 @@ extern Menu firmwareCheckMenu;
 extern Menu firmwareDownloadMenu;
 extern Menu firmwareFlashMenu;
 extern Menu firmwareResetMenu;
+extern Menu infoMenu;
 Menu *currentMenu;
 // functions
 void setOSD(bool value, WriteCallbackHandlerFunction handler);
@@ -701,7 +702,7 @@ void displayProgress(int read, int total, int line) {
 
 ///////////////////////////////////////////////////////////////////
 
-Menu debugMenu("DebugMenu", (uint8_t*) OSD_DEBUG_MENU, NO_SELECT_LINE, NO_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
+Menu infoMenu("InfoMenu", (uint8_t*) OSD_INFO_MENU, NO_SELECT_LINE, NO_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         currentMenu = &mainMenu;
         currentMenu->Display();

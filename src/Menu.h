@@ -189,8 +189,8 @@ char OSD_FIRMWARE_RESET_MENU[521] = (
     "          A: Ok    B: Cancel            "
 );
 
-char OSD_DEBUG_MENU[521] = (
-    "Debug                                   "
+char OSD_INFO_MENU[521] = (
+    "Info                                    "
     "                                        "
     "COMING SOON                             "
     "                                        "
