@@ -747,7 +747,7 @@ Menu infoMenu("InfoMenu", (uint8_t*) OSD_INFO_MENU, NO_SELECT_LINE, NO_SELECT_LI
             uint8_t idcheckhigh = buffer[DBG_DATA_ID_CHECK_HIGH];
             uint8_t idchecklow = buffer[DBG_DATA_ID_CHECK_LOW];
             uint8_t chiprevision = buffer[DBG_DATA_CHIP_REVISION];
-            uint8_t vicdetected = buffer[DBG_DATA_VIC_DETECTED];
+            uint8_t vicdetected = buffer[DBG_DATA_VIC_DETECTED] >> 2;
             uint8_t victorx = buffer[DBG_DATA_VIC_TO_RX];
             uint8_t miscdata = buffer[DBG_DATA_MISC_DATA];
 
