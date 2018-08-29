@@ -19,6 +19,7 @@ class DebugTask : public Task {
         bool isRunning = false;
 
         virtual bool OnStart() {
+            DBG_OUTPUT_PORT.printf("DebugTask: OnStart\n");
             isRunning = true;
             return true;
         }
@@ -59,6 +60,7 @@ class DebugTask : public Task {
         }
 
         virtual void OnStop() {
+            DBG_OUTPUT_PORT.printf("DebugTask: OnStop\n");
             isRunning = false;
         }
 };
