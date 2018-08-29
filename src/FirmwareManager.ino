@@ -19,6 +19,7 @@
 #include "FlashESPTask.h"
 #include "FlashESPIndexTask.h"
 #include "FPGATask.h"
+#include "DebugTask.h"
 #include "Menu.h"
 
 #define DEFAULT_SSID ""
@@ -88,6 +89,7 @@ TaskManager taskManager;
 FlashTask flashTask(1);
 FlashESPTask flashESPTask(1);
 FlashESPIndexTask flashESPIndexTask(1);
+DebugTask debugTask(8);
 
 extern Menu mainMenu;
 extern Menu outputResMenu;
@@ -715,64 +717,13 @@ void displayProgress(int read, int total, int line) {
 
 Menu infoMenu("InfoMenu", (uint8_t*) OSD_INFO_MENU, NO_SELECT_LINE, NO_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        taskManager.StopTask(&debugTask);
         currentMenu = &mainMenu;
         currentMenu->Display();
         return;
     }
 }, NULL, [](uint8_t Address, uint8_t Value) {
-    fpgaTask.Read(DEBUG_BASE_ADDRESS, DEBUG_DATA_LEN, [](uint8_t address, uint8_t* buffer, uint8_t len){
-        char result[9*40] = "";
-
-        if (address == DEBUG_BASE_ADDRESS && len == DEBUG_DATA_LEN) {
-            uint16_t frameCounter = (buffer[DBG_DATA_FRAMECOUNTER_HIGH] << 8) | buffer[DBG_DATA_FRAMECOUNTER_LOW];
-            uint8_t restartCounter = buffer[DBG_DATA_RESTART_COUNT];
-            uint8_t hdmiIntCounter = buffer[DBG_DATA_HDMI_INT_COUNT];
-            uint8_t notReadyCounter = buffer[DBG_DATA_NOT_READY_COUNT];
-
-            uint8_t cts1 = buffer[DBG_DATA_CTS1_STATUS];
-            uint8_t maxcts1 = buffer[DBG_DATA_MAX_CTS1_STATUS];
-            uint8_t smaxcts1 = buffer[DBG_DATA_SUMMARY_CTS1_STATUS];
-
-            uint8_t cts2 = buffer[DBG_DATA_CTS2_STATUS];
-            uint8_t maxcts2 = buffer[DBG_DATA_MAX_CTS2_STATUS];
-            uint8_t smaxcts2 = buffer[DBG_DATA_SUMMARY_CTS2_STATUS];
-
-            uint8_t cts3 = buffer[DBG_DATA_CTS3_STATUS];
-            uint8_t maxcts3 = buffer[DBG_DATA_MAX_CTS3_STATUS];
-            uint8_t smaxcts3 = buffer[DBG_DATA_SUMMARY_CTS3_STATUS];
-            uint8_t ssmaxcts3 = buffer[DBG_DATA_SUMMARY_SUMMARY_CTS3_STATUS];
-
-            uint8_t pll_errors = buffer[DBG_DATA_PLL_ERRORS];
-
-            uint8_t idcheckhigh = buffer[DBG_DATA_ID_CHECK_HIGH];
-            uint8_t idchecklow = buffer[DBG_DATA_ID_CHECK_LOW];
-            uint8_t chiprevision = buffer[DBG_DATA_CHIP_REVISION];
-            uint8_t vicdetected = buffer[DBG_DATA_VIC_DETECTED] >> 2;
-            uint8_t victorx = buffer[DBG_DATA_VIC_TO_RX];
-            uint8_t miscdata = buffer[DBG_DATA_MISC_DATA];
-
-            snprintf(result, 9*40, 
-                "FRM:  %04d  RC/HR/NR: %03d/%03d/%03d       "
-                "PLLE:  %03d                              "
-                "CTS1:  %03d %03d %03d                      "
-                "CTS2:  %03d %03d %03d                      "
-                "CTS3:  %03d %03d %03d %03d                  "
-                "CID:   %03d %03d %03d                      "
-                "VIC:   %03d %03d                          "
-                "MISC:  %x",
-                frameCounter, restartCounter, hdmiIntCounter, notReadyCounter, 
-                pll_errors,
-                cts1, maxcts1, smaxcts1,
-                cts2, maxcts2, smaxcts2,
-                cts3, maxcts3, smaxcts3, ssmaxcts3,
-                idcheckhigh, idchecklow, chiprevision,
-                vicdetected, victorx,
-                miscdata
-            );
-
-            fpgaTask.DoWriteToOSD(0, MENU_OFFSET + 2, (uint8_t*) result);
-        }
-    });
+    taskManager.StartTask(&debugTask);
 });
 
 ///////////////////////////////////////////////////////////////////

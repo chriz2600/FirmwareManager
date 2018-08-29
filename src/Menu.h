@@ -189,6 +189,8 @@ char OSD_FIRMWARE_RESET_MENU[521] = (
     "          A: Ok    B: Cancel            "
 );
 
+#define MENU_INF_RESULT_LINE 2
+#define MENU_INF_RESULT_HEIGHT 9
 char OSD_INFO_MENU[521] = (
     "Info                                    "
     "                                        "
