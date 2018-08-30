@@ -127,7 +127,7 @@ class FPGATask : public Task {
                     }
                 }
             } else if (Update) {
-                //DBG_OUTPUT_PORT.printf("Write: %x %x\n", Address, Value);
+                DBG_OUTPUT_PORT.printf("Write: %x %x\n", Address, Value);
                 uint8_t buffer[2];
                 buffer[0] = Address;
                 buffer[1] = Value;

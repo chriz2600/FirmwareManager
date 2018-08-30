@@ -1570,6 +1570,35 @@ void setupHTTPServer() {
         request->send(200);
     });
 
+    server.on("/scanlines", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if(!_isAuthenticated(request)) {
+            return request->requestAuthentication();
+        }
+
+        AsyncWebParameter *s_intensity = request->getParam("intensity", true);
+        AsyncWebParameter *s_thickness = request->getParam("thickness", true);
+        AsyncWebParameter *s_oddeven = request->getParam("oddeven", true);
+        AsyncWebParameter *s_active = request->getParam("active", true);
+
+        int intensity = atoi(s_intensity->value().c_str());
+        int thickness = atoi(s_thickness->value().c_str());
+        int oddeven = atoi(s_oddeven->value().c_str());
+        int active = atoi(s_active->value().c_str());
+
+        uint8_t upper = (intensity >> 1);
+        uint8_t lower = (intensity << 7) | ((thickness & 0x01) << 6) | ((oddeven & 0x01) << 5) | ((active & 0x01) << 4);
+
+        fpgaTask.Write(I2C_SCANLINE_UPPER, upper, [ lower ](uint8_t Address, uint8_t Value) {
+            fpgaTask.Write(I2C_SCANLINE_LOWER, lower, [](uint8_t Address, uint8_t Value) {
+                fpgaTask.Read(I2C_SCANLINE_UPPER, 2, [](uint8_t address, uint8_t* buffer, uint8_t len) {
+                    DBG_OUTPUT_PORT.printf("--> %x %x %x\n", address, buffer[0], buffer[1]);
+                });
+            });
+        });
+        request->send(200);
+
+    });
+
     server.on("/osd/on", HTTP_GET, [](AsyncWebServerRequest *request) {
         if(!_isAuthenticated(request)) {
             return request->requestAuthentication();
@@ -1623,14 +1652,6 @@ void setupHTTPServer() {
             return request->requestAuthentication();
         }
         fpgaTask.Write(I2C_OUTPUT_RESOLUTION, ForceVGA | CurrentResolution | PLL_RESET_ON, NULL);
-        request->send(200);
-    });
-
-    server.on("/power/down/hdmi", HTTP_GET, [](AsyncWebServerRequest *request) {
-        if(!_isAuthenticated(request)) {
-            return request->requestAuthentication();
-        }
-        fpgaTask.Write(I2C_POWER, HDMI_POWER_DOWN, NULL);
         request->send(200);
     });
 

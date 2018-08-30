@@ -61,17 +61,15 @@
 #define PLL_RESET_OFF (0x00)
 #define PLL_RESET_ON (0x40)
 
-#define HDMI_POWER_UP (0x00)
-#define HDMI_POWER_DOWN (0x20)
-
 #define I2C_OSD_ADDR_OFFSET (0x80)
 #define I2C_OSD_ENABLE (0x81)
 #define I2C_OSD_ACTIVE_LINE (0x82)
 #define I2C_OUTPUT_RESOLUTION (0x83)
-#define I2C_POWER (0x84)
+#define I2C_SCANLINE_UPPER (0x87)
+#define I2C_SCANLINE_LOWER (0x88)
 #define I2C_PING (0xFF)
 
-#define I2C_RECOVER_TRIES 2600
+#define I2C_RECOVER_TRIES 5200
 #define I2C_RECOVER_RETRY_INTERVAL_US 200
 
 // // controller data, int16

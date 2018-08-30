@@ -295,10 +295,6 @@ var term = $('#term').terminal(function(command, term) {
         startTransaction(null, function() {
             resetpll();
         });
-    } else if (command.match(/^\s*hdmi_power_down\s*$/)) {
-        startTransaction(null, function() {
-            hdmiPowerDown();
-        });
     } else if (command.match(/^\s*details\s*$/)) {
         typed_message(term,
               getHelpDetailsFPGA()
@@ -791,14 +787,6 @@ function resetpll() {
         endTransaction("Reset PLL done.");
     }).fail(function() {
         endTransaction('Error resetting PLL.', true);
-    });
-}
-
-function hdmiPowerDown() {
-    $.ajax("/power/down/hdmi").done(function (data) {
-        endTransaction("Powering donw HDMI done.");
-    }).fail(function() {
-        endTransaction('Error powering down HDMI.', true);
     });
 }
 
