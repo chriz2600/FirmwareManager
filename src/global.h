@@ -69,7 +69,7 @@
 #define I2C_SCANLINE_LOWER (0x88)
 #define I2C_PING (0xFF)
 
-#define I2C_RECOVER_TRIES 5200
+#define I2C_RECOVER_TRIES 100000
 #define I2C_RECOVER_RETRY_INTERVAL_US 200
 
 // // controller data, int16
@@ -137,5 +137,12 @@ typedef std::function<void(int read, int total, bool done, int error)> ProgressC
 #define DBG_DATA_SUMMARY_SUMMARY_CTS3_STATUS 21
 #define DBG_DATA_HDMI_INT_COUNT 22
 #define DBG_DATA_NOT_READY_COUNT 23
+
+#define SCANLINES_ENABLED "on"
+#define SCANLINES_DISABLED "off"
+#define SCANLINES_ODD "odd"
+#define SCANLINES_EVEN "even"
+#define SCANLINES_THICK "thick"
+#define SCANLINES_THIN "thin"
 
 #endif

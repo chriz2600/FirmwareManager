@@ -117,7 +117,6 @@ class FlashTask : public Task {
             int percentComplete = (totalLength <= 0 ? 0 : (int)(readLength * 100 / totalLength));
             if (prevPercentComplete != percentComplete) {
                 prevPercentComplete = percentComplete;
-                DBG_OUTPUT_PORT.printf("[%i]\n", percentComplete);
                 InvokeCallback(false);
             }
         }

@@ -83,7 +83,6 @@ class FlashESPIndexTask : public Task {
             if (prevPercentComplete != percentComplete) {
                 prevPercentComplete = percentComplete;
                 InvokeCallback(false);
-                DBG_OUTPUT_PORT.printf("[%i]\n", percentComplete);
             }
         }
 

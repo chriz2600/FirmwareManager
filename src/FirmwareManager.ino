@@ -36,6 +36,10 @@
 #define DEFAULT_HOST "dc-firmware-manager"
 #define DEFAULT_VIDEO_MODE VIDEO_MODE_STR_FORCE_VGA
 #define DEFAULT_VIDEO_RESOLUTION RESOLUTION_STR_1080p
+#define DEFAULT_SCANLINES_ACTIVE SCANLINES_DISABLED
+#define DEFAULT_SCANLINES_INTENSITY "175"
+#define DEFAULT_SCANLINES_ODDEVEN SCANLINES_EVEN
+#define DEFAULT_SCANLINES_THICKNESS SCANLINES_THIN
 
 char ssid[64] = DEFAULT_SSID;
 char password[64] = DEFAULT_PASSWORD;
@@ -84,6 +88,11 @@ bool firmwareCheckStarted;
 bool firmwareDownloadStarted;
 bool firmwareFlashStarted;
 
+bool scanlinesActive;
+int scanlinesIntensity;
+bool scanlinesOddeven;
+bool scanlinesThickness;
+
 MD5Builder md5;
 TaskManager taskManager;
 FlashTask flashTask(1);
@@ -100,6 +109,7 @@ extern Menu firmwareCheckMenu;
 extern Menu firmwareDownloadMenu;
 extern Menu firmwareFlashMenu;
 extern Menu firmwareResetMenu;
+extern Menu scanlinesMenu;
 extern Menu infoMenu;
 Menu *currentMenu;
 // functions
@@ -123,6 +133,20 @@ void writeVideoMode2(String vidMode);
 void readCurrentResolution();
 void writeCurrentResolution();
 uint8_t cfgRes2Int(char* intResolution);
+void readScanlinesActive();
+void writeScanlinesActive();
+void readScanlinesIntensity();
+void writeScanlinesIntensity();
+void readScanlinesOddeven();
+void writeScanlinesOddeven();
+void readScanlinesThickness();
+void writeScanlinesThickness();
+
+void setScanlines(uint8_t upper, uint8_t lower, WriteCallbackHandlerFunction handler) {
+    fpgaTask.Write(I2C_SCANLINE_UPPER, upper, [ lower, handler ](uint8_t Address, uint8_t Value) {
+        fpgaTask.Write(I2C_SCANLINE_LOWER, lower, handler);
+    });
+}
 
 ///////////////////////////////////////////////////////////////////
 // Menus start -->
@@ -715,6 +739,96 @@ void displayProgress(int read, int total, int line) {
 
 ///////////////////////////////////////////////////////////////////
 
+Menu scanlinesMenu("ScanlinesMenu", (uint8_t*) OSD_SCANLINES_MENU, MENU_SL_FIRST_SELECT_LINE, MENU_SL_LAST_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
+        // restoreScanlines
+        readScanlinesActive();
+        readScanlinesIntensity();
+        readScanlinesThickness();
+        readScanlinesOddeven();
+        setScanlines(getScanlinesUpperPart(), getScanlinesLowerPart(), [](uint8_t Address, uint8_t Value) {
+            currentMenu = &mainMenu;
+            currentMenu->Display();
+        });
+        return;
+    }
+
+    if (CHECK_MASK(controller_data, CTRLR_BUTTON_A)) {
+        // restoreScanlines
+        writeScanlinesActive();
+        writeScanlinesIntensity();
+        writeScanlinesThickness();
+        writeScanlinesOddeven();
+        currentMenu = &mainMenu;
+        currentMenu->Display();
+        return;
+    }
+
+    bool isLeft = CHECK_MASK(controller_data, CTRLR_PAD_LEFT);
+    bool isRight = CHECK_MASK(controller_data, CTRLR_PAD_RIGHT);
+
+    if (isLeft || isRight) {
+        switch (menu_activeLine) {
+            case MENU_SL_ACTIVE:
+                scanlinesActive = !scanlinesActive;
+                setScanlines(getScanlinesUpperPart(), getScanlinesLowerPart(), [](uint8_t Address, uint8_t Value) {
+                    char buffer[MENU_WIDTH] = "";
+                    snprintf(buffer, 7, "%6s", (scanlinesActive ? SCANLINES_ENABLED : SCANLINES_DISABLED));
+                    fpgaTask.DoWriteToOSD(12, MENU_OFFSET + MENU_SL_ACTIVE, (uint8_t*) buffer);
+                });
+                break;
+            case MENU_SL_THICKNESS:
+                scanlinesThickness = !scanlinesThickness;
+                setScanlines(getScanlinesUpperPart(), getScanlinesLowerPart(), [](uint8_t Address, uint8_t Value) {
+                    char buffer[MENU_WIDTH] = "";
+                    snprintf(buffer, 7, "%6s", (scanlinesThickness ? SCANLINES_THICK : SCANLINES_THIN));
+                    fpgaTask.DoWriteToOSD(12, MENU_OFFSET + MENU_SL_THICKNESS, (uint8_t*) buffer);
+                });
+                break;
+            case MENU_SL_ODDEVEN:
+                scanlinesOddeven = !scanlinesOddeven;
+                setScanlines(getScanlinesUpperPart(), getScanlinesLowerPart(), [](uint8_t Address, uint8_t Value) {
+                    char buffer[MENU_WIDTH] = "";
+                    snprintf(buffer, 7, "%6s", (scanlinesOddeven ? SCANLINES_ODD : SCANLINES_EVEN));
+                    fpgaTask.DoWriteToOSD(12, MENU_OFFSET + MENU_SL_ODDEVEN, (uint8_t*) buffer);
+                });
+                break;
+            case MENU_SL_INTENSITY:
+                if (isLeft) {
+                    if (scanlinesIntensity > 0) {
+                        scanlinesIntensity -= 1;
+                    }
+                } else if (isRight) {
+                    if (scanlinesIntensity < 256) {
+                        scanlinesIntensity += 1;
+                    }
+                }
+                setScanlines(getScanlinesUpperPart(), getScanlinesLowerPart(), [](uint8_t Address, uint8_t Value) {
+                    char buffer[MENU_WIDTH] = "";
+                    snprintf(buffer, 7, "%6d", scanlinesIntensity);
+                    fpgaTask.DoWriteToOSD(12, MENU_OFFSET + MENU_SL_INTENSITY, (uint8_t*) buffer);
+                });
+                break;
+        }
+    }
+}, [](uint8_t* menu_text) {
+    // write current values to menu
+    char buffer[MENU_WIDTH] = "";
+
+    snprintf(buffer, 7, "%6s", (scanlinesActive ? SCANLINES_ENABLED : SCANLINES_DISABLED));
+    memcpy(&menu_text[MENU_SL_ACTIVE * MENU_WIDTH + 12], buffer, 6);
+    snprintf(buffer, 7, "%6d", scanlinesIntensity);
+    memcpy(&menu_text[MENU_SL_INTENSITY * MENU_WIDTH + 12], buffer, 6);
+    snprintf(buffer, 7, "%6s", (scanlinesThickness ? SCANLINES_THICK : SCANLINES_THIN));
+    memcpy(&menu_text[MENU_SL_THICKNESS * MENU_WIDTH + 12], buffer, 6);
+    snprintf(buffer, 7, "%6s", (scanlinesOddeven ? SCANLINES_ODD : SCANLINES_EVEN));
+    memcpy(&menu_text[MENU_SL_ODDEVEN * MENU_WIDTH + 12], buffer, 6);
+
+    return MENU_SL_FIRST_SELECT_LINE;
+}, NULL);
+
+///////////////////////////////////////////////////////////////////
+
 Menu infoMenu("InfoMenu", (uint8_t*) OSD_INFO_MENU, NO_SELECT_LINE, NO_SELECT_LINE, [](uint16_t controller_data, uint8_t menu_activeLine) {
     if (CHECK_MASK(controller_data, CTRLR_BUTTON_B)) {
         taskManager.StopTask(&debugTask);
@@ -742,6 +856,10 @@ Menu mainMenu("MainMenu", (uint8_t*) OSD_MAIN_MENU, MENU_M_FIRST_SELECT_LINE, ME
                 break;
             case MENU_M_VM:
                 currentMenu = &videoModeMenu;
+                currentMenu->Display();
+                break;
+            case MENU_M_SL:
+                currentMenu = &scanlinesMenu;
                 currentMenu->Display();
                 break;
             case MENU_M_FW:
@@ -1580,23 +1698,16 @@ void setupHTTPServer() {
         AsyncWebParameter *s_oddeven = request->getParam("oddeven", true);
         AsyncWebParameter *s_active = request->getParam("active", true);
 
-        int intensity = atoi(s_intensity->value().c_str());
-        int thickness = atoi(s_thickness->value().c_str());
-        int oddeven = atoi(s_oddeven->value().c_str());
-        int active = atoi(s_active->value().c_str());
+        scanlinesIntensity = atoi(s_intensity->value().c_str());
+        scanlinesThickness = atoi(s_thickness->value().c_str());
+        scanlinesOddeven = atoi(s_oddeven->value().c_str());
+        scanlinesActive = atoi(s_active->value().c_str());
 
-        uint8_t upper = (intensity >> 1);
-        uint8_t lower = (intensity << 7) | ((thickness & 0x01) << 6) | ((oddeven & 0x01) << 5) | ((active & 0x01) << 4);
+        uint8_t upper = getScanlinesUpperPart();
+        uint8_t lower = getScanlinesLowerPart();
 
-        fpgaTask.Write(I2C_SCANLINE_UPPER, upper, [ lower ](uint8_t Address, uint8_t Value) {
-            fpgaTask.Write(I2C_SCANLINE_LOWER, lower, [](uint8_t Address, uint8_t Value) {
-                fpgaTask.Read(I2C_SCANLINE_UPPER, 2, [](uint8_t address, uint8_t* buffer, uint8_t len) {
-                    DBG_OUTPUT_PORT.printf("--> %x %x %x\n", address, buffer[0], buffer[1]);
-                });
-            });
-        });
+        setScanlines(upper, lower, NULL);
         request->send(200);
-
     });
 
     server.on("/osd/on", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -1757,8 +1868,75 @@ void writeCurrentResolution() {
     snprintf(configuredResolution, 16, "%s", cfgRes.c_str());
 }
 
+/////////
+
+void readScanlinesActive() {
+    char buffer[32] = "";
+    _readFile("/etc/scanlines/active", buffer, 32, DEFAULT_SCANLINES_ACTIVE);
+    if (strcmp(buffer, SCANLINES_ENABLED) == 0) {
+        scanlinesActive = true;
+    }
+    scanlinesActive = false;
+}
+
+void writeScanlinesActive() {
+    _writeFile("/etc/scanlines/active", scanlinesActive ? SCANLINES_ENABLED : SCANLINES_DISABLED, 32);
+}
+
+/////////
+
+void readScanlinesIntensity() {
+    char buffer[32] = "";
+    _readFile("/etc/scanlines/intensity", buffer, 32, DEFAULT_SCANLINES_INTENSITY);
+    scanlinesIntensity = atoi(buffer);
+    if (scanlinesIntensity < 0) {
+        scanlinesIntensity = 0;
+    } else if (scanlinesIntensity > 256) {
+        scanlinesIntensity = 256;
+    }
+}
+
+void writeScanlinesIntensity() {
+    char buffer[32] = "";
+    snprintf(buffer, 31, "%d", scanlinesIntensity);
+    _writeFile("/etc/scanlines/intensity", buffer, 32);
+}
+
+/////////
+
+void readScanlinesOddeven() {
+    char buffer[32] = "";
+    _readFile("/etc/scanlines/oddeven", buffer, 32, DEFAULT_SCANLINES_ODDEVEN);
+    if (strcmp(buffer, SCANLINES_ODD) == 0) {
+        scanlinesOddeven = true;
+    }
+    scanlinesOddeven = false;
+}
+
+void writeScanlinesOddeven() {
+    _writeFile("/etc/scanlines/oddeven", scanlinesOddeven ? SCANLINES_ODD : SCANLINES_EVEN, 32);
+}
+
+/////////
+
+void readScanlinesThickness() {
+    char buffer[32] = "";
+    _readFile("/etc/scanlines/thickness", buffer, 32, DEFAULT_SCANLINES_THICKNESS);
+    if (strcmp(buffer, SCANLINES_THICK) == 0) {
+        scanlinesThickness = true;
+    }
+    scanlinesThickness = false;
+}
+
+void writeScanlinesThickness() {
+    _writeFile("/etc/scanlines/thickness", scanlinesThickness ? SCANLINES_THICK : SCANLINES_THIN, 32);
+}
+
+/////////
+/////////
+
 void setupOutputResolution() {
-    int retryCount = 500;
+    int retryCount = 5000;
     int retries = 0;
 
     readVideoMode();
@@ -1773,7 +1951,44 @@ void setupOutputResolution() {
         if (last_error == NO_ERROR) {
             break;
         }
-        delayMicroseconds(5000);
+        delayMicroseconds(500);
+        yield();
+    }
+    DBG_OUTPUT_PORT.printf("   retry loops needed: %i\n", retries);
+}
+
+uint8_t getScanlinesUpperPart() {
+    return (scanlinesIntensity >> 1);
+}
+
+uint8_t getScanlinesLowerPart() {
+    return (scanlinesIntensity << 7) | (scanlinesThickness << 6) | (scanlinesOddeven << 5) | (scanlinesActive << 4);
+}
+
+void setupScanlines() {
+    int retryCount = 5000;
+    int retries = 0;
+
+    readScanlinesActive();
+    readScanlinesIntensity();
+    readScanlinesOddeven();
+    readScanlinesThickness();
+
+    uint8_t upper = getScanlinesUpperPart();
+    uint8_t lower = getScanlinesLowerPart();
+
+    DBG_OUTPUT_PORT.printf(">> Setting up scanlines:\n");
+    while (retryCount >= 0) {
+        bool saved_error = NO_ERROR;
+        retries++;
+        fpgaTask.Write(I2C_SCANLINE_UPPER, upper, NULL); fpgaTask.ForceLoop();
+        saved_error = last_error;
+        fpgaTask.Write(I2C_SCANLINE_LOWER, lower, NULL); fpgaTask.ForceLoop();
+        retryCount--;
+        if (saved_error == NO_ERROR && last_error == NO_ERROR) {
+            break;
+        }
+        delayMicroseconds(500);
         yield();
     }
     DBG_OUTPUT_PORT.printf("   retry loops needed: %i\n", retries);
@@ -1791,6 +2006,7 @@ void setup(void) {
     setupI2C();
     setupSPIFFS();
     setupOutputResolution();
+    setupScanlines();
     setupTaskManager();
     setupCredentials();
     setupWiFi();

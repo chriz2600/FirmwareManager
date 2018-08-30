@@ -16,18 +16,19 @@
 
 #define MENU_M_OR 2
 #define MENU_M_VM 3
-#define MENU_M_FW 4
-#define MENU_M_INF 5
+#define MENU_M_SL 4
+#define MENU_M_FW 5
+#define MENU_M_INF 6
 #define MENU_M_FIRST_SELECT_LINE 2
-#define MENU_M_LAST_SELECT_LINE 5
+#define MENU_M_LAST_SELECT_LINE 6
 char OSD_MAIN_MENU[521] = (
     "MainMenu                                "
     "                                        "
     "- Output Resolution                     "
     "- Video Mode Settings                   "
+    "- Scanlines                             "
     "- Firmware Upgrade                      "
-    "- Info                                  "
-    "                                        "
+    "- Debug Info                            "
     "                                        "
     "                                        "
     "                                        "
@@ -189,10 +190,32 @@ char OSD_FIRMWARE_RESET_MENU[521] = (
     "          A: Ok    B: Cancel            "
 );
 
+#define MENU_SL_ACTIVE 2
+#define MENU_SL_INTENSITY 3
+#define MENU_SL_ODDEVEN 4
+#define MENU_SL_THICKNESS 5
+#define MENU_SL_FIRST_SELECT_LINE 2
+#define MENU_SL_LAST_SELECT_LINE 5
+char OSD_SCANLINES_MENU[521] = (
+    "Scanlines                               "
+    "                                        "
+    "- On/Off:    _____                      "
+    "- Intensity: _____                      "
+    "- Odd/Even:  _____                      "
+    "- Thickness: _____                      "
+    "                                        "
+    "  left/right (d-pad): change value.     "
+    "  A: save settings and exit.            "
+    "  B: discard changes and exit.          "
+    "                                        "
+    "                                        "
+    "          A: Save  B: Cancel            "
+);
+
 #define MENU_INF_RESULT_LINE 2
 #define MENU_INF_RESULT_HEIGHT 9
 char OSD_INFO_MENU[521] = (
-    "Info                                    "
+    "Debug Info                              "
     "                                        "
     "                                        "
     "                                        "
@@ -248,7 +271,7 @@ class Menu
             menu_activeLine = pre_hook(menu_text);
         }
         fpgaTask.DoWriteToOSD(0, 9, menu_text, [&]() {
-            DBG_OUTPUT_PORT.printf("%i %i\n", menu_activeLine, MENU_OFFSET + menu_activeLine);
+            //DBG_OUTPUT_PORT.printf("%i %i\n", menu_activeLine, MENU_OFFSET + menu_activeLine);
             fpgaTask.Write(I2C_OSD_ACTIVE_LINE, MENU_OFFSET + menu_activeLine, display_callback);
         });
     }
